@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>施設予約カレンダー</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .header {
+            margin-bottom: 20px;
+        }
+        
+        .csv-upload {
+            margin-bottom: 20px;
+        }
+        
+        .csv-upload input {
+            margin-right: 10px;
+        }
+        
+        .calendar-container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: auto;
+        }
+        
+        .calendar-table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 800px;
+        }
+        
+        .calendar-table th,
+        .calendar-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+            vertical-align: top;
+            height: 80px;
+        }
+        
+        .calendar-table th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+            height: 40px;
+            text-align: center;
+        }
+        
+        .room-header {
+            background-color: #e9ecef;
+            font-weight: bold;
+            width: 200px;
+            text-align: center;
+        }
+        
+        .date-cell {
+            white-space: pre-line;
+            font-size: 12px;
+            overflow: hidden;
+        }
+        
+        .event-item {
+            background-color: rgba(0, 123, 255, 0.1);
+            border-left: 3px solid #007bff;
+            padding: 2px 4px;
+            margin-bottom: 2px;
+            border-radius: 2px;
+            font-size: 11px;
+            line-height: 1.2;
+        }
+        
+        .no-events {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            font-size: 18px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>施設予約カレンダー</h1>
+        
+        <div class="csv-upload">
+            <input type="file" id="csvFile" accept=".csv" />
+            <button onclick="uploadCSV()">CSV アップロード</button>
+        </div>
+    </div>
+    
+    <div class="calendar-container">
+        <div id="loading" class="loading">読み込み中...</div>
+        <div id="noEvents" class="no-events" style="display: none;">予約がありません</div>
+        <table id="calendarTable" class="calendar-table" style="display: none;">
+            <thead>
+                <tr id="headerRow">
+                    <th class="room-header">施設</th>
+                </tr>
+            </thead>
+            <tbody id="calendarBody">
+            </tbody>
+        </table>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/encoding-japanese@1.0.30/encoding.min.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
