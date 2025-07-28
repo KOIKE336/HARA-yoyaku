@@ -16,12 +16,8 @@
             margin-bottom: 20px;
         }
         
-        .csv-upload {
+        .header-controls {
             margin-bottom: 20px;
-        }
-        
-        .csv-upload input {
-            margin-right: 10px;
         }
         
         .calendar-container {
@@ -141,9 +137,7 @@
     <div class="header">
         <h1>施設予約カレンダー</h1>
         
-        <div class="csv-upload">
-            <input type="file" id="csvFile" accept=".csv" />
-            <button onclick="uploadCSV()">CSV アップロード</button>
+        <div class="header-controls">
             <button onclick="toggleAdminMode()" id="adminToggle">管理モード</button>
         </div>
         
@@ -163,8 +157,6 @@
     </div>
 
     <script src="https://uicdn.toast.com/calendar/latest/toastui-calendar.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/encoding-japanese@1.0.30/encoding.min.js"></script>
     <script>
         const HORIZON_DAYS = 30;
         const ROOMS = ['会議室(さくら)', '相談室(スミレ・コスモス)', 'テレワークルームA', 'テレワークルームB'];
@@ -304,85 +296,6 @@
             document.getElementById('noEvents').style.display = 'block';
         }
 
-        // CSV upload function
-        function uploadCSV() {
-            const fileInput = document.getElementById('csvFile');
-            const file = fileInput.files[0];
-            
-            if (!file) {
-                alert('CSVファイルを選択してください');
-                return;
-            }
-            
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    // Detect encoding and convert to UTF-8 if needed
-                    const arrayBuffer = e.target.result;
-                    const uint8Array = new Uint8Array(arrayBuffer);
-                    
-                    let text;
-                    if (typeof Encoding !== 'undefined') {
-                        const detectedEncoding = Encoding.detect(uint8Array);
-                        if (detectedEncoding === 'SJIS' || detectedEncoding === 'EUCJP') {
-                            const unicodeArray = Encoding.convert(uint8Array, {
-                                to: 'UNICODE',
-                                from: detectedEncoding
-                            });
-                            text = Encoding.codeToString(unicodeArray);
-                        } else {
-                            text = new TextDecoder('utf-8').decode(arrayBuffer);
-                        }
-                    } else {
-                        text = new TextDecoder('utf-8').decode(arrayBuffer);
-                    }
-                    
-                    // Parse CSV
-                    Papa.parse(text, {
-                        header: true,
-                        skipEmptyLines: true,
-                        complete: function(results) {
-                            const events = results.data.map((row, index) => {
-                                return {
-                                    id: `csv_${index}`,
-                                    room: row['部屋'] || row['施設'] || row['room'],
-                                    name: row['氏名'] || row['予約者'] || row['name'],
-                                    start: row['開始'] || row['開始時刻'] || row['start'],
-                                    end: row['終了'] || row['終了時刻'] || row['end']
-                                };
-                            }).filter(event => event.room && event.name && event.start && event.end);
-                            
-                            console.log('[calendar] CSV events loaded:', events);
-                            currentEvents = events;
-                            
-                            // Process the loaded events
-                            const filteredEvents = filterEventsBy30Days(events);
-                            const calendarEvents = convertToCalendarEvents(filteredEvents);
-                            
-                            // Clear and add to calendar
-                            calendar.clear();
-                            calendar.createEvents(calendarEvents);
-                            
-                            // Show calendar
-                            document.getElementById('loading').style.display = 'none';
-                            document.getElementById('noEvents').style.display = 'none';
-                            document.getElementById('calendar').style.display = 'block';
-                            
-                            alert(`${events.length}件の予約データを読み込みました`);
-                        },
-                        error: function(error) {
-                            console.error('CSV parse error:', error);
-                            alert('CSVファイルの解析に失敗しました');
-                        }
-                    });
-                } catch (error) {
-                    console.error('File read error:', error);
-                    alert('ファイルの読み込みに失敗しました');
-                }
-            };
-            
-            reader.readAsArrayBuffer(file);
-        }
 
         // Admin functions
         let adminMode = false;
