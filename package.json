@@ -1,0 +1,11 @@
+{
+  "name": "hara-yoyaku",
+  "version": "1.0.0",
+  "description": "施設予約カレンダーアプリ",
+  "dependencies": {
+    "@vercel/kv": "^0.2.4"
+  },
+  "engines": {
+    "node": "18.x"
+  }
+}
