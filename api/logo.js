@@ -19,11 +19,17 @@ async function readBody(req) {
 export default async function handler(req, res) {
   console.log('[kv] POST request received');
   
-  // 環境変数チェック
-  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
-    console.error('[kv] ❌ ENV not set');
+  // 環境変数チェックとデバッグ出力
+  const kvUrl = process.env.KV_REST_API_URL;
+  const kvToken = process.env.KV_REST_API_TOKEN;
+  
+  if (!kvUrl || !kvToken) {
+    console.error('[kv] ❌ ENV not set - URL:', !!kvUrl, 'TOKEN:', !!kvToken);
     return res.status(500).json({ error: 'ENV not set' });
   }
+  
+  console.log('[kv] ENV URL =', kvUrl);
+  console.log('[kv] ENV TOKEN =', kvToken ? kvToken.slice(0, 8) + '...' : 'undefined');
   
   // POSTメソッドのみ許可
   if (req.method !== 'POST') {
@@ -37,7 +43,16 @@ export default async function handler(req, res) {
     console.log('[kv] Request data:', JSON.stringify(data));
     
     // KVから既存データ取得（null防御）
-    let events = await kv.get('events') || [];
+    let events;
+    try {
+      events = await kv.get('events');
+      console.log('[kv] kv.get result:', events);
+      events = events || [];
+    } catch (getError) {
+      console.error('[kv] ❌ KV get ERROR:', getError.message);
+      console.error('[kv] Stack:', getError.stack);
+      events = [];
+    }
     console.log('[kv] Current events count:', events.length);
 
     // 新しいイベント作成
@@ -54,6 +69,7 @@ export default async function handler(req, res) {
       start: data['開始'],
       end: data['終了']
     };
+    console.log('[kv] New event created:', JSON.stringify(event));
 
     // 同じ回答IDがあれば上書き、無ければ追加
     const existingIndex = events.findIndex(e => e.id === eventId);
@@ -64,35 +80,47 @@ export default async function handler(req, res) {
       events.push(event);
       console.log('[kv] Added event ID:', eventId);
     }
+    console.log('[kv] Events to save:', JSON.stringify(events));
 
     // KVに保存
+    let setResult;
     try {
-      await kv.set('events', events);
-      console.log('[kv] KV set completed');
+      setResult = await kv.set('events', events);
+      console.log('[kv] kv.set result:', setResult);
     } catch (setError) {
       console.error('[kv] ❌ KV save ERROR:', setError.message);
       console.error('[kv] Stack:', setError.stack);
-      return res.status(500).json({ error: 'KV save failed' });
+      return res.status(500).json({ error: 'KV save failed: ' + setError.message });
     }
 
-    // 保存検証
+    // Upstash直接GET検証
     try {
-      const verifyEvents = await kv.get('events') || [];
-      if (verifyEvents.length !== events.length) {
-        console.error('[kv] ❌ KV save ERROR: count mismatch - expected:', events.length, 'got:', verifyEvents.length);
-        return res.status(500).json({ error: 'Save verification failed' });
+      const verifyUrl = `${kvUrl}/get/events`;
+      const verifyResponse = await fetch(verifyUrl, {
+        headers: {
+          'Authorization': `Bearer ${kvToken}`
+        }
+      });
+      const verifyData = await verifyResponse.json();
+      console.log('[kv] VERIFY get/events →', JSON.stringify(verifyData));
+      
+      if (verifyData.result) {
+        const verifyEvents = verifyData.result || [];
+        console.log('[kv] ✅ KV save SUCCESS:', verifyEvents.length, 'events');
+      } else {
+        console.error('[kv] ❌ KV save ERROR: verification failed - no result in response');
+        return res.status(500).json({ error: 'Save verification failed - no data found' });
       }
-      console.log('[kv] ✅ KV save SUCCESS:', events.length, 'events');
     } catch (verifyError) {
-      console.error('[kv] ❌ KV save ERROR: verification failed:', verifyError.message);
+      console.error('[kv] ❌ KV save ERROR: verification request failed:', verifyError.message);
       console.error('[kv] Stack:', verifyError.stack);
-      return res.status(500).json({ error: 'Save verification failed' });
+      return res.status(500).json({ error: 'Save verification failed: ' + verifyError.message });
     }
 
     res.status(200).json({ status: 'ok' });
   } catch (error) {
     console.error('[kv] ❌ KV save ERROR:', error.message);
     console.error('[kv] Stack:', error.stack);
-    res.status(500).json({ error: 'Request processing failed' });
+    res.status(500).json({ error: 'Request processing failed: ' + error.message });
   }
 }
