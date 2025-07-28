@@ -6,17 +6,18 @@ export default async function handler(req, res) {
   // CORS許可ヘッダを設定
   res.setHeader('Access-Control-Allow-Origin', '*');
   
-  // 環境変数チェックとデバッグ出力
-  const kvUrl = process.env.KV_REST_API_URL;
-  const kvToken = process.env.KV_REST_API_TOKEN;
+  // 環境変数チェック
+  const urlSet = !!process.env.KV_REST_API_URL;
+  const tokenSet = !!process.env.KV_REST_API_TOKEN;
   
-  if (!kvUrl || !kvToken) {
-    console.error('[kv] ❌ ENV not set - URL:', !!kvUrl, 'TOKEN:', !!kvToken);
-    return res.status(500).json({ error: 'ENV not set' });
+  if (!urlSet || !tokenSet) {
+    console.error('[kv] ❌ ENV not set - URL:', urlSet, 'TOKEN:', tokenSet);
+    return res.status(500).json({ 
+      error: 'ENV not set', 
+      url: urlSet, 
+      token: tokenSet 
+    });
   }
-  
-  console.log('[kv] ENV URL =', kvUrl);
-  console.log('[kv] ENV TOKEN =', kvToken ? kvToken.slice(0, 8) + '...' : 'undefined');
   
   // GETメソッドのみ許可
   if (req.method !== 'GET') {

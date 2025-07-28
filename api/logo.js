@@ -4,9 +4,16 @@ export default async function handler(req, res) {
   console.log('[kv] POST request received');
   
   // 環境変数チェック
-  if (!process.env.KV_REST_API_URL || !process.env.KV_REST_API_TOKEN) {
-    console.error('[kv] ❌ ENV not set');
-    return res.status(500).json({ error: 'ENV not set' });
+  const urlSet = !!process.env.KV_REST_API_URL;
+  const tokenSet = !!process.env.KV_REST_API_TOKEN;
+  
+  if (!urlSet || !tokenSet) {
+    console.error('[kv] ❌ ENV not set - URL:', urlSet, 'TOKEN:', tokenSet);
+    return res.status(500).json({ 
+      error: 'ENV not set', 
+      url: urlSet, 
+      token: tokenSet 
+    });
   }
   
   if (req.method !== 'POST') {
