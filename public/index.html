@@ -48,6 +48,93 @@
             padding: 20px;
             color: #666;
         }
+        
+        .admin-panel {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .admin-panel h3 {
+            margin-top: 0;
+            color: #495057;
+        }
+        
+        .events-list {
+            max-height: 300px;
+            overflow-y: auto;
+            margin-bottom: 10px;
+        }
+        
+        .event-item-admin {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            margin-bottom: 8px;
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        
+        .event-info {
+            flex: 1;
+        }
+        
+        .event-meta {
+            color: #666;
+            font-size: 12px;
+            margin-top: 2px;
+        }
+        
+        .delete-btn {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .delete-btn:hover {
+            background: #c82333;
+        }
+        
+        .admin-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        .admin-btn:hover {
+            background: #0056b3;
+        }
+        
+        #adminToggle {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-left: 10px;
+        }
+        
+        #adminToggle:hover {
+            background: #1e7e34;
+        }
+        
+        #adminToggle.active {
+            background: #ffc107;
+            color: #212529;
+        }
     </style>
 </head>
 <body>
@@ -57,6 +144,15 @@
         <div class="csv-upload">
             <input type="file" id="csvFile" accept=".csv" />
             <button onclick="uploadCSV()">CSV アップロード</button>
+            <button onclick="toggleAdminMode()" id="adminToggle">管理モード</button>
+        </div>
+        
+        <div id="adminPanel" class="admin-panel" style="display: none;">
+            <h3>📋 イベント管理</h3>
+            <div id="eventsList" class="events-list">
+                <p>読み込み中...</p>
+            </div>
+            <button onclick="refreshEventsList()" class="admin-btn">🔄 更新</button>
         </div>
     </div>
     
@@ -286,6 +382,98 @@
             };
             
             reader.readAsArrayBuffer(file);
+        }
+
+        // Admin functions
+        let adminMode = false;
+        
+        function toggleAdminMode() {
+            const adminPanel = document.getElementById('adminPanel');
+            const adminToggle = document.getElementById('adminToggle');
+            
+            adminMode = !adminMode;
+            
+            if (adminMode) {
+                adminPanel.style.display = 'block';
+                adminToggle.textContent = '📅 カレンダー';
+                adminToggle.classList.add('active');
+                refreshEventsList();
+            } else {
+                adminPanel.style.display = 'none';
+                adminToggle.textContent = '管理モード';
+                adminToggle.classList.remove('active');
+            }
+        }
+        
+        async function refreshEventsList() {
+            const eventsList = document.getElementById('eventsList');
+            eventsList.innerHTML = '<p>読み込み中...</p>';
+            
+            try {
+                const response = await fetch('/api/events');
+                const data = await response.json();
+                
+                console.log('[admin] Events loaded:', data.events?.length || 0);
+                
+                if (!data.events || data.events.length === 0) {
+                    eventsList.innerHTML = '<p>イベントがありません</p>';
+                    return;
+                }
+                
+                // Sort events by start time
+                const sortedEvents = data.events.sort((a, b) => new Date(a.start) - new Date(b.start));
+                
+                eventsList.innerHTML = sortedEvents.map(event => {
+                    const startTime = new Date(event.start).toLocaleString('ja-JP');
+                    const endTime = new Date(event.end).toLocaleString('ja-JP');
+                    
+                    return `
+                        <div class="event-item-admin">
+                            <div class="event-info">
+                                <div><strong>${event.name}</strong> @ ${event.room}</div>
+                                <div class="event-meta">ID: ${event.id} | ${startTime} ～ ${endTime}</div>
+                            </div>
+                            <button class="delete-btn" onclick="deleteEvent('${event.id}')">🗑️ 削除</button>
+                        </div>
+                    `;
+                }).join('');
+                
+            } catch (error) {
+                console.error('[admin] Error loading events:', error);
+                eventsList.innerHTML = '<p>エラーが発生しました</p>';
+            }
+        }
+        
+        async function deleteEvent(eventId) {
+            if (!confirm(`イベント ID: ${eventId} を削除しますか？`)) {
+                return;
+            }
+            
+            try {
+                console.log('[admin] Deleting event:', eventId);
+                
+                const response = await fetch(`/api/events/${eventId}`, {
+                    method: 'DELETE'
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    console.log('[admin] Delete success:', result);
+                    alert(`イベントを削除しました\n残り: ${result.remainingCount}件`);
+                    
+                    // Refresh both admin list and calendar
+                    refreshEventsList();
+                    fetchEvents();
+                } else {
+                    console.error('[admin] Delete failed:', result);
+                    alert(`削除に失敗しました: ${result.error}`);
+                }
+                
+            } catch (error) {
+                console.error('[admin] Delete error:', error);
+                alert('削除中にエラーが発生しました');
+            }
         }
 
         // Initialize
