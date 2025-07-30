@@ -228,9 +228,26 @@
     </div>
 
     <!-- External libraries -->
+    <!-- 🚨 Toast UI Calendar - Multiple CDN attempts for maximum compatibility -->
     <script src="https://uicdn.toast.com/calendar/latest/toastui-calendar.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/encoding-japanese@1.0.30/encoding.min.js"></script>
+    
+    <!-- 🚨 Calendar library availability check -->
+    <script>
+        console.log('🚨 [library] Checking library availability after load...');
+        console.log('🚨 [library] toastui available:', typeof toastui !== 'undefined');
+        console.log('🚨 [library] toastui.Calendar available:', typeof toastui !== 'undefined' && typeof toastui.Calendar !== 'undefined');
+        console.log('🚨 [library] tui available (legacy):', typeof tui !== 'undefined');
+        console.log('🚨 [library] Papa available:', typeof Papa !== 'undefined');
+        console.log('🚨 [library] Encoding available:', typeof Encoding !== 'undefined');
+        
+        // Fallback for legacy tui namespace
+        if (typeof toastui === 'undefined' && typeof tui !== 'undefined') {
+            console.log('🚨 [library] Using legacy tui namespace');
+            window.toastui = tui;
+        }
+    </script>
     
     <!-- 🚨 ALL JAVASCRIPT INLINE - NO EXTERNAL FILES -->
     <script>
@@ -348,23 +365,43 @@
             if (noEvents) noEvents.style.display = 'block';
         };
         
-        // Initialize calendar (simplified for debugging)
+        // Initialize calendar with comprehensive error handling
         const initCalendar = () => {
             console.log('🚨 [calendar] Initializing calendar...');
+            console.log('🚨 [calendar] Checking library availability:');
+            console.log('🚨 [calendar] - toastui:', typeof toastui !== 'undefined');
+            console.log('🚨 [calendar] - toastui.Calendar:', typeof toastui !== 'undefined' && typeof toastui.Calendar !== 'undefined');
+            console.log('🚨 [calendar] - tui (legacy):', typeof tui !== 'undefined');
             
-            if (typeof toastui === 'undefined') {
-                console.error('🚨 [calendar] Toast UI Calendar not loaded');
+            // Check for calendar element
+            const calendarEl = document.getElementById('calendar');
+            console.log('🚨 [calendar] Calendar element found:', !!calendarEl);
+            if (!calendarEl) {
+                console.error('🚨 [calendar] ERROR: Calendar container (#calendar) not found in HTML!');
                 return;
             }
             
-            const calendarEl = document.getElementById('calendar');
-            if (!calendarEl) {
-                console.error('🚨 [calendar] Calendar element not found');
+            // Check library availability with multiple fallbacks
+            let CalendarClass = null;
+            
+            if (typeof toastui !== 'undefined' && typeof toastui.Calendar !== 'undefined') {
+                CalendarClass = toastui.Calendar;
+                console.log('🚨 [calendar] Using toastui.Calendar');
+            } else if (typeof tui !== 'undefined' && typeof tui.Calendar !== 'undefined') {
+                CalendarClass = tui.Calendar;
+                console.log('🚨 [calendar] Using tui.Calendar (legacy)');
+            } else {
+                console.error('🚨 [calendar] CRITICAL ERROR: Toast UI Calendar library not available!');
+                console.error('🚨 [calendar] Available global objects:', Object.keys(window).filter(key => key.includes('ui') || key.includes('calendar')));
+                
+                // Show fallback message
+                calendarEl.innerHTML = '<div style="text-align: center; padding: 40px; color: #dc3545; font-size: 18px;"><strong>⚠️ カレンダーライブラリの読み込みに失敗しました</strong><br><small>ページを再読み込みしてください</small></div>';
                 return;
             }
             
             try {
-                calendar = new toastui.Calendar(calendarEl, {
+                console.log('🚨 [calendar] Creating calendar instance...');
+                calendar = new CalendarClass(calendarEl, {
                     defaultView: 'month',
                     useCreationPopup: false,
                     useDetailPopup: true,
@@ -374,24 +411,45 @@
                         backgroundColor: ROOM_COLORS[room] || '#007bff',
                         borderColor: ROOM_COLORS[room] || '#007bff',
                         dragBgColor: ROOM_COLORS[room] || '#007bff'
-                    }))
+                    })),
+                    template: {
+                        monthDayname: (dayname) => `<span class="toastui-calendar-weekday-name">${dayname.label}</span>`
+                    }
                 });
-                console.log('🚨 [calendar] Calendar initialized successfully');
+                console.log('🚨 [calendar] ✅ Toast UI Calendar initialized successfully!');
+                console.log('🚨 [calendar] Calendar instance:', calendar);
+                
+                // Initialize calendar display
+                const loading = document.getElementById('loading');
+                if (loading) loading.style.display = 'none';
+                calendarEl.style.display = 'block';
+                
             } catch (error) {
-                console.error('🚨 [calendar] Calendar initialization failed:', error);
+                console.error('🚨 [calendar] ❌ Calendar initialization failed:', error);
+                console.error('🚨 [calendar] Error details:', error.message);
+                console.error('🚨 [calendar] Stack trace:', error.stack);
+                
+                // Show error message in calendar container
+                calendarEl.innerHTML = `<div style="text-align: center; padding: 40px; color: #dc3545; font-size: 18px;"><strong>⚠️ カレンダーの初期化に失敗しました</strong><br><small>${error.message}</small></div>`;
             }
         };
         
-        // Fetch events (simplified for debugging)
+        // Fetch events with calendar dependency check
         const fetchEvents = async () => {
             console.log('🚨 [calendar] Fetching events...');
             
-            const loading = document.getElementById('loading');
-            if (loading) loading.style.display = 'none';
+            // Only proceed if calendar is initialized
+            if (!calendar) {
+                console.warn('🚨 [calendar] Calendar not initialized. Skipping event fetch.');
+                showNoEvents();
+                return;
+            }
             
             try {
                 const response = await fetch('/api/events');
                 const data = await response.json();
+                
+                console.log('🚨 [calendar] API response:', data);
                 
                 if (!data.events || !Array.isArray(data.events) || data.events.length === 0) {
                     console.log('🚨 [calendar] No events found');
@@ -401,18 +459,71 @@
                 
                 console.log('🚨 [calendar] Events loaded:', data.events.length);
                 
+                // Process and filter events
+                const filteredEvents = filterEventsBy30Days(data.events);
+                console.log('🚨 [calendar] Filtered events (30 days):', filteredEvents.length);
+                
+                if (filteredEvents.length === 0) {
+                    showNoEvents();
+                    return;
+                }
+                
+                // Show calendar and hide other states
                 const calendarEl = document.getElementById('calendar');
                 const noEvents = document.getElementById('noEvents');
+                const loading = document.getElementById('loading');
+                
+                if (loading) loading.style.display = 'none';
                 if (noEvents) noEvents.style.display = 'none';
                 if (calendarEl) calendarEl.style.display = 'block';
                 
-                // Would process and display events here
+                // Convert and add events to calendar
+                const calendarEvents = convertToCalendarEvents(filteredEvents);
+                console.log('🚨 [calendar] Calendar events prepared:', calendarEvents);
+                
+                try {
+                    calendar.clear();
+                    calendar.createEvents(calendarEvents);
+                    console.log('🚨 [calendar] ✅ Events successfully added to calendar');
+                } catch (eventError) {
+                    console.error('🚨 [calendar] ❌ Error adding events to calendar:', eventError);
+                }
                 
             } catch (error) {
-                console.error('🚨 [calendar] Error fetching events:', error);
+                console.error('🚨 [calendar] ❌ Error fetching events:', error);
                 const loading = document.getElementById('loading');
                 if (loading) loading.textContent = 'エラーが発生しました';
             }
+        };
+        
+        // Enhanced utility functions
+        const filterEventsBy30Days = (events) => {
+            const now = new Date();
+            const endDate = new Date(now.getTime() + HORIZON_DAYS * 24 * 60 * 60 * 1000);
+            
+            return events.filter(event => {
+                const eventDate = new Date(event.start);
+                return eventDate >= now && eventDate <= endDate;
+            });
+        };
+        
+        const convertToCalendarEvents = (apiEvents) => {
+            return apiEvents.map(event => {
+                const startDate = new Date(event.start);
+                const endDate = new Date(event.end);
+                
+                return {
+                    id: event.id.toString(),
+                    calendarId: event.room,
+                    title: `${event.name}`,
+                    category: 'time',
+                    start: startDate,
+                    end: endDate,
+                    backgroundColor: ROOM_COLORS[event.room] || '#007bff',
+                    borderColor: ROOM_COLORS[event.room] || '#007bff',
+                    color: '#ffffff'
+                };
+            });
         };
         
         console.log('🚨 [EMERGENCY] All functions registered to window object');
@@ -462,9 +573,15 @@
                 console.error('🚨 [app] ERROR: Refresh button NOT FOUND');
             }
             
-            // Initialize calendar and fetch events
+            // Initialize calendar FIRST, then fetch events
+            console.log('🚨 [EMERGENCY] Starting calendar initialization...');
             initCalendar();
-            fetchEvents();
+            
+            // Wait a bit for calendar to initialize, then fetch events
+            setTimeout(() => {
+                console.log('🚨 [EMERGENCY] Starting event fetch after calendar init...');
+                fetchEvents();
+            }, 500);
             
             console.log('🚨 [EMERGENCY] UI binding complete - ALL BUTTONS SHOULD WORK NOW');
         });
