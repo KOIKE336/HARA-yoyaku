@@ -434,6 +434,52 @@
             }
         };
         
+        // Check environment setup
+        const checkEnvironment = async () => {
+            console.log('🚨 [env] Checking Vercel KV environment setup...');
+            try {
+                const response = await fetch('/api/env-check');
+                const envStatus = await response.json();
+                console.log('🚨 [env] Environment status:', envStatus);
+                
+                if (!envStatus.urlSet || !envStatus.tokenSet) {
+                    console.error('🚨 [env] ❌ Vercel KV environment variables not configured!');
+                    console.error('🚨 [env] ❌ URL set:', envStatus.urlSet, 'TOKEN set:', envStatus.tokenSet);
+                    return false;
+                }
+                
+                console.log('🚨 [env] ✅ Vercel KV environment properly configured');
+                return true;
+            } catch (error) {
+                console.error('🚨 [env] ❌ Environment check failed:', error);
+                return false;
+            }
+        };
+        
+        // Create test events for demo when API fails
+        const createTestEvents = () => {
+            console.log('🚨 [demo] Creating test events for demonstration...');
+            
+            const testEvents = [
+                {
+                    id: 'test-1',
+                    room: '会議室(さくら)',
+                    name: 'テストイベント1',
+                    start: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Tomorrow
+                    end: new Date(Date.now() + 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000).toISOString() // Tomorrow + 2 hours
+                },
+                {
+                    id: 'test-2',
+                    room: 'テレワークルームA',
+                    name: 'テストイベント2',
+                    start: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(), // Day after tomorrow
+                    end: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000 + 3 * 60 * 60 * 1000).toISOString() // Day after tomorrow + 3 hours
+                }
+            ];
+            
+            return testEvents;
+        };
+        
         // Fetch events with calendar dependency check
         const fetchEvents = async () => {
             console.log('🚨 [calendar] Fetching events...');
@@ -446,53 +492,116 @@
             }
             
             try {
+                console.log('🚨 [calendar] Making API request to /api/events...');
                 const response = await fetch('/api/events');
-                const data = await response.json();
                 
-                console.log('🚨 [calendar] API response:', data);
+                console.log('🚨 [calendar] API response status:', response.status);
+                console.log('🚨 [calendar] API response ok:', response.ok);
+                console.log('🚨 [calendar] API response headers:', Object.fromEntries(response.headers));
+                
+                // Handle non-200 responses
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('🚨 [calendar] ❌ API ERROR - Status:', response.status);
+                    console.error('🚨 [calendar] ❌ API ERROR - Response:', errorText);
+                    
+                    try {
+                        const errorJson = JSON.parse(errorText);
+                        console.error('🚨 [calendar] ❌ API ERROR - Parsed JSON:', errorJson);
+                        
+                        // Show specific error message for KV environment issues
+                        if (errorJson.error && errorJson.error.includes('ENV not set')) {
+                            console.error('🚨 [calendar] ❌ VERCEL KV ENVIRONMENT NOT CONFIGURED!');
+                            console.error('🚨 [calendar] ❌ Please set KV_REST_API_URL and KV_REST_API_TOKEN in Vercel dashboard');
+                            
+                            const loading = document.getElementById('loading');
+                            if (loading) loading.innerHTML = '<div style="color: #dc3545; text-align: center; padding: 20px;"><strong>❌ Vercel KV環境変数が未設定です</strong><br><small>KV_REST_API_URL and KV_REST_API_TOKEN required</small><br><br><button onclick="fetchEventsWithFallback()" style="background: #007bff; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">🔄 テストデータで再試行</button></div>';
+                            
+                            // Make fetchEventsWithFallback globally available
+                            window.fetchEventsWithFallback = () => {
+                                console.log('🚨 [demo] User requested fallback to test data');
+                                const testEvents = createTestEvents();
+                                displayEvents(testEvents);
+                            };
+                            return;
+                        }
+                    } catch (jsonError) {
+                        console.error('🚨 [calendar] Error parsing API error response as JSON:', jsonError);
+                    }
+                    
+                    throw new Error(`API Error ${response.status}: ${errorText}`);
+                }
+                
+                const data = await response.json();
+                console.log('🚨 [calendar] ✅ API SUCCESS - Raw response:', data);
+                console.log('🚨 [calendar] ✅ API SUCCESS - Data type:', typeof data);
+                console.log('🚨 [calendar] ✅ API SUCCESS - Data keys:', Object.keys(data));
                 
                 if (!data.events || !Array.isArray(data.events) || data.events.length === 0) {
-                    console.log('🚨 [calendar] No events found');
+                    console.log('🚨 [calendar] No events found in API response');
                     showNoEvents();
                     return;
                 }
                 
-                console.log('🚨 [calendar] Events loaded:', data.events.length);
-                
-                // Process and filter events
-                const filteredEvents = filterEventsBy30Days(data.events);
-                console.log('🚨 [calendar] Filtered events (30 days):', filteredEvents.length);
-                
-                if (filteredEvents.length === 0) {
-                    showNoEvents();
-                    return;
-                }
-                
-                // Show calendar and hide other states
-                const calendarEl = document.getElementById('calendar');
-                const noEvents = document.getElementById('noEvents');
-                const loading = document.getElementById('loading');
-                
-                if (loading) loading.style.display = 'none';
-                if (noEvents) noEvents.style.display = 'none';
-                if (calendarEl) calendarEl.style.display = 'block';
-                
-                // Convert and add events to calendar
-                const calendarEvents = convertToCalendarEvents(filteredEvents);
-                console.log('🚨 [calendar] Calendar events prepared:', calendarEvents);
-                
-                try {
-                    calendar.clear();
-                    calendar.createEvents(calendarEvents);
-                    console.log('🚨 [calendar] ✅ Events successfully added to calendar');
-                } catch (eventError) {
-                    console.error('🚨 [calendar] ❌ Error adding events to calendar:', eventError);
-                }
+                displayEvents(data.events);
                 
             } catch (error) {
                 console.error('🚨 [calendar] ❌ Error fetching events:', error);
                 const loading = document.getElementById('loading');
                 if (loading) loading.textContent = 'エラーが発生しました';
+            }
+        };
+        
+        // Common function to display events on calendar
+        const displayEvents = (events) => {
+            console.log('🚨 [calendar] Displaying events:', events.length);
+            
+            if (!calendar) {
+                console.error('🚨 [calendar] ❌ Calendar not initialized, cannot display events');
+                return;
+            }
+            
+            if (!events || events.length === 0) {
+                console.log('🚨 [calendar] No events to display');
+                showNoEvents();
+                return;
+            }
+            
+            // Process and filter events
+            const filteredEvents = filterEventsBy30Days(events);
+            console.log('🚨 [calendar] Filtered events (30 days):', filteredEvents.length);
+            
+            if (filteredEvents.length === 0) {
+                showNoEvents();
+                return;
+            }
+            
+            // Show calendar and hide other states
+            const calendarEl = document.getElementById('calendar');
+            const noEvents = document.getElementById('noEvents');
+            const loading = document.getElementById('loading');
+            
+            if (loading) loading.style.display = 'none';
+            if (noEvents) noEvents.style.display = 'none';
+            if (calendarEl) calendarEl.style.display = 'block';
+            
+            // Convert and add events to calendar
+            const calendarEvents = convertToCalendarEvents(filteredEvents);
+            console.log('🚨 [calendar] Calendar events prepared:', calendarEvents);
+            
+            try {
+                calendar.clear();
+                calendar.createEvents(calendarEvents);
+                console.log('🚨 [calendar] ✅ Events successfully added to calendar!');
+                console.log('🚨 [calendar] ✅ Calendar should now be visible with', calendarEvents.length, 'events');
+            } catch (eventError) {
+                console.error('🚨 [calendar] ❌ Error adding events to calendar:', eventError);
+                
+                // Show error in calendar container
+                const calendarEl = document.getElementById('calendar');
+                if (calendarEl) {
+                    calendarEl.innerHTML = `<div style="text-align: center; padding: 40px; color: #dc3545; font-size: 18px;"><strong>⚠️ イベント表示エラー</strong><br><small>${eventError.message}</small></div>`;
+                }
             }
         };
         
@@ -573,14 +682,25 @@
                 console.error('🚨 [app] ERROR: Refresh button NOT FOUND');
             }
             
-            // Initialize calendar FIRST, then fetch events
+            // Initialize calendar FIRST, then check environment and fetch events
             console.log('🚨 [EMERGENCY] Starting calendar initialization...');
             initCalendar();
             
-            // Wait a bit for calendar to initialize, then fetch events
-            setTimeout(() => {
-                console.log('🚨 [EMERGENCY] Starting event fetch after calendar init...');
-                fetchEvents();
+            // Wait a bit for calendar to initialize, then check environment and fetch events
+            setTimeout(async () => {
+                console.log('🚨 [EMERGENCY] Starting environment check and event fetch...');
+                
+                // Check environment setup first
+                const envOk = await checkEnvironment();
+                
+                if (envOk) {
+                    console.log('🚨 [EMERGENCY] Environment OK, fetching real events...');
+                    fetchEvents();
+                } else {
+                    console.warn('🚨 [EMERGENCY] Environment issues detected, will show fallback UI');
+                    // fetchEvents() will handle the fallback UI display
+                    fetchEvents();
+                }
             }, 500);
             
             console.log('🚨 [EMERGENCY] UI binding complete - ALL BUTTONS SHOULD WORK NOW');
