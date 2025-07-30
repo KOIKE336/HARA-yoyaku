@@ -18,6 +18,40 @@
         
         .header-controls {
             margin-bottom: 20px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .csv-upload {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .csv-upload input {
+            padding: 5px;
+        }
+        
+        .status-badge {
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: bold;
+            display: none;
+        }
+        
+        .status-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
         }
         
         .calendar-container {
@@ -113,6 +147,24 @@
             background: #0056b3;
         }
         
+        .csv-btn {
+            background: #17a2b8;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        .csv-btn:hover {
+            background: #138496;
+        }
+        
+        .csv-btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        
         #adminToggle {
             background: #28a745;
             color: white;
@@ -120,7 +172,6 @@
             padding: 8px 16px;
             border-radius: 5px;
             cursor: pointer;
-            margin-left: 10px;
         }
         
         #adminToggle:hover {
@@ -138,7 +189,12 @@
         <h1>施設予約カレンダー</h1>
         
         <div class="header-controls">
-            <button onclick="toggleAdminMode()" id="adminToggle">管理モード</button>
+            <div class="csv-upload">
+                <input type="file" id="csvFile" accept=".csv" />
+                <button onclick="uploadCSV()" id="csvUploadBtn" class="csv-btn">📄 CSV 取り込み</button>
+            </div>
+            <button onclick="toggleAdminMode()" id="adminToggle">🔧 管理モード</button>
+            <div id="statusBadge" class="status-badge"></div>
         </div>
         
         <div id="adminPanel" class="admin-panel" style="display: none;">
@@ -157,248 +213,8 @@
     </div>
 
     <script src="https://uicdn.toast.com/calendar/latest/toastui-calendar.min.js"></script>
-    <script>
-        const HORIZON_DAYS = 30;
-        const ROOMS = ['会議室(さくら)', '相談室(スミレ・コスモス)', 'テレワークルームA', 'テレワークルームB'];
-
-        // Room colors for visual distinction
-        const ROOM_COLORS = {
-            '会議室(さくら)': '#ff69b4',
-            '相談室(スミレ・コスモス)': '#9370db',
-            'テレワークルームA': '#87ceeb',
-            'テレワークルームB': '#90ee90'
-        };
-
-        let calendar;
-        let currentEvents = [];
-
-        // Initialize calendar
-        function initCalendar() {
-            const calendarEl = document.getElementById('calendar');
-            
-            calendar = new toastui.Calendar(calendarEl, {
-                defaultView: 'month',
-                useCreationPopup: false,
-                useDetailPopup: true,
-                calendars: ROOMS.map((room, index) => ({
-                    id: room,
-                    name: room,
-                    backgroundColor: ROOM_COLORS[room] || '#007bff',
-                    borderColor: ROOM_COLORS[room] || '#007bff',
-                    dragBgColor: ROOM_COLORS[room] || '#007bff'
-                })),
-                template: {
-                    monthDayname: function(dayname) {
-                        return `<span class="toastui-calendar-weekday-name">${dayname.label}</span>`;
-                    }
-                }
-            });
-            
-            console.log('[calendar] Calendar initialized');
-        }
-
-        // Filter events within the next 30 days
-        function filterEventsBy30Days(events) {
-            const now = new Date();
-            const endDate = new Date(now.getTime() + HORIZON_DAYS * 24 * 60 * 60 * 1000);
-            
-            console.log('[calendar] Filtering events from', now.toISOString(), 'to', endDate.toISOString());
-            
-            return events.filter(event => {
-                const eventDate = new Date(event.start);
-                const isInRange = eventDate >= now && eventDate <= endDate;
-                if (!isInRange) {
-                    console.log('[calendar] Filtered out:', event.id, event.start);
-                }
-                return isInRange;
-            });
-        }
-
-        // Convert API events to Toast UI Calendar format
-        function convertToCalendarEvents(apiEvents) {
-            console.log('[calendar] Converting API events:', apiEvents);
-            
-            const calendarEvents = apiEvents.map(event => {
-                const startDate = new Date(event.start);
-                const endDate = new Date(event.end);
-                
-                return {
-                    id: event.id.toString(),
-                    calendarId: event.room,
-                    title: `${event.name}`,
-                    category: 'time',
-                    start: startDate,
-                    end: endDate,
-                    backgroundColor: ROOM_COLORS[event.room] || '#007bff',
-                    borderColor: ROOM_COLORS[event.room] || '#007bff',
-                    color: '#ffffff'
-                };
-            });
-            
-            console.log('[calendar] Converted calendar events:', calendarEvents);
-            return calendarEvents;
-        }
-
-        // Fetch events from API
-        async function fetchEvents() {
-            console.log('[calendar] Fetching events from API...');
-            
-            try {
-                const response = await fetch('/api/events');
-                const data = await response.json();
-                
-                console.log('[calendar] Raw API response:', data);
-                
-                if (!data.events || !Array.isArray(data.events)) {
-                    console.error('[calendar] Invalid API response format');
-                    showNoEvents();
-                    return;
-                }
-                
-                currentEvents = data.events;
-                console.log('[calendar] Current events:', currentEvents);
-                
-                // Filter by 30 days
-                const filteredEvents = filterEventsBy30Days(currentEvents);
-                console.log('[calendar] Filtered events (30 days):', filteredEvents);
-                
-                // Hide loading
-                document.getElementById('loading').style.display = 'none';
-                
-                if (filteredEvents.length === 0) {
-                    showNoEvents();
-                    return;
-                }
-                
-                // Show calendar and hide no events message
-                document.getElementById('noEvents').style.display = 'none';
-                document.getElementById('calendar').style.display = 'block';
-                
-                // Convert and add events to calendar
-                const calendarEvents = convertToCalendarEvents(filteredEvents);
-                
-                // Clear existing events
-                calendar.clear();
-                
-                // Add events to calendar
-                calendar.createEvents(calendarEvents);
-                
-                console.log('[calendar] Events successfully added to calendar');
-                
-            } catch (error) {
-                console.error('[calendar] Error fetching events:', error);
-                document.getElementById('loading').textContent = 'エラーが発生しました';
-            }
-        }
-
-        function showNoEvents() {
-            document.getElementById('calendar').style.display = 'none';
-            document.getElementById('noEvents').style.display = 'block';
-        }
-
-
-        // Admin functions
-        let adminMode = false;
-        
-        function toggleAdminMode() {
-            const adminPanel = document.getElementById('adminPanel');
-            const adminToggle = document.getElementById('adminToggle');
-            
-            adminMode = !adminMode;
-            
-            if (adminMode) {
-                adminPanel.style.display = 'block';
-                adminToggle.textContent = '📅 カレンダー';
-                adminToggle.classList.add('active');
-                refreshEventsList();
-            } else {
-                adminPanel.style.display = 'none';
-                adminToggle.textContent = '管理モード';
-                adminToggle.classList.remove('active');
-            }
-        }
-        
-        async function refreshEventsList() {
-            const eventsList = document.getElementById('eventsList');
-            eventsList.innerHTML = '<p>読み込み中...</p>';
-            
-            try {
-                const response = await fetch('/api/events');
-                const data = await response.json();
-                
-                console.log('[admin] Events loaded:', data.events?.length || 0);
-                
-                if (!data.events || data.events.length === 0) {
-                    eventsList.innerHTML = '<p>イベントがありません</p>';
-                    return;
-                }
-                
-                // Sort events by start time
-                const sortedEvents = data.events.sort((a, b) => new Date(a.start) - new Date(b.start));
-                
-                eventsList.innerHTML = sortedEvents.map(event => {
-                    const startTime = new Date(event.start).toLocaleString('ja-JP');
-                    const endTime = new Date(event.end).toLocaleString('ja-JP');
-                    
-                    return `
-                        <div class="event-item-admin">
-                            <div class="event-info">
-                                <div><strong>${event.name}</strong> @ ${event.room}</div>
-                                <div class="event-meta">ID: ${event.id} | ${startTime} ～ ${endTime}</div>
-                            </div>
-                            <button class="delete-btn" onclick="deleteEvent('${event.id}')">🗑️ 削除</button>
-                        </div>
-                    `;
-                }).join('');
-                
-            } catch (error) {
-                console.error('[admin] Error loading events:', error);
-                eventsList.innerHTML = '<p>エラーが発生しました</p>';
-            }
-        }
-        
-        async function deleteEvent(eventId) {
-            if (!confirm(`イベント ID: ${eventId} を削除しますか？`)) {
-                return;
-            }
-            
-            try {
-                console.log('[admin] Deleting event:', eventId);
-                
-                const response = await fetch(`/api/events/${eventId}`, {
-                    method: 'DELETE'
-                });
-                
-                const result = await response.json();
-                
-                if (response.ok) {
-                    console.log('[admin] Delete success:', result);
-                    alert(`イベントを削除しました\n残り: ${result.remainingCount}件`);
-                    
-                    // Refresh both admin list and calendar
-                    refreshEventsList();
-                    fetchEvents();
-                } else {
-                    console.error('[admin] Delete failed:', result);
-                    alert(`削除に失敗しました: ${result.error}`);
-                }
-                
-            } catch (error) {
-                console.error('[admin] Delete error:', error);
-                alert('削除中にエラーが発生しました');
-            }
-        }
-
-        // Initialize
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('[calendar] DOM loaded, initializing...');
-            
-            initCalendar();
-            fetchEvents();
-            
-            // Auto-refresh every 30 seconds
-            setInterval(fetchEvents, 30000);
-        });
-    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/encoding-japanese@1.0.30/encoding.min.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>
