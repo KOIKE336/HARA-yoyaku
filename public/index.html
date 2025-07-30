@@ -343,39 +343,116 @@
                         const validEvents = [];
                         const errors = [];
                         
+                        // 🚨 ENHANCED CSV PROCESSING WITH COMPREHENSIVE DEBUGGING
+                        console.log('🚨 [csv] Raw CSV headers detected:', Object.keys(results.data[0] || {}));
+                        
                         results.data.forEach((row, index) => {
                             console.log(`🚨 [csv] Processing row ${index + 1}:`, row);
+                            console.log(`🚨 [csv] Row ${index + 1} object keys:`, Object.keys(row));
                             
-                            // Extract data with multiple column name variations
-                            const room = row['部屋'] || row['施設'] || row['Room'];
-                            const name = row['氏名'] || row['予約者'] || row['Name'];
-                            const start = row['開始'] || row['開始時刻'] || row['Start'];
-                            const end = row['終了'] || row['終了時刻'] || row['End'];
+                            // 1. ENHANCED DATA EXTRACTION with comprehensive column mapping
+                            let room, name, start, end, dateStr, timeStr;
                             
-                            console.log(`🚨 [csv] Row ${index + 1} extracted - Room:${room}, Name:${name}, Start:${start}, End:${end}`);
+                            // Room/Facility detection
+                            room = row['部屋'] || row['施設'] || row['Room'] || row['会議室'] || row['場所'];
                             
-                            // Validate required fields
+                            // Name detection with more variations
+                            name = row['氏名'] || row['予約者'] || row['Name'] || row['申込者'] || row['利用者'] || 
+                                   row['244:lastname'] && row['244:firstname'] ? `${row['244:lastname']}${row['244:firstname']}` :
+                                   row['91:lastname'] && row['91:firstname'] ? `${row['91:lastname']}${row['91:firstname']}` :
+                                   row['242:lastname'] && row['242:firstname'] ? `${row['242:lastname']}${row['242:firstname']}` :
+                                   row['92:text'] || row['93:text'] || row['102:text'];
+                            
+                            // Date detection from various formats
+                            dateStr = row['5:date'] || row['日付'] || row['利用日'] || row['予約日'];
+                            
+                            // Direct datetime detection (simple format)
+                            start = row['開始'] || row['開始時刻'] || row['Start'];
+                            end = row['終了'] || row['終了時刻'] || row['End'];
+                            
+                            // Time range detection for complex formats
+                            timeStr = row['時間'] || row['利用時間'] || row['予約時間'];
+                            
+                            console.log(`🚨 [csv] Row ${index + 1} initial extraction:`, {
+                                room, name, start, end, dateStr, timeStr
+                            });
+                            
+                            // 2. ADVANCED DATE/TIME PARSING
+                            if (!start && !end && dateStr && timeStr) {
+                                console.log(`🚨 [csv] Row ${index + 1} attempting advanced date/time parsing...`);
+                                
+                                // Parse time range like "12：30～13：00" or "12:30-13:00"
+                                const timeRange = parseTimeRange(timeStr);
+                                console.log(`🚨 [csv] Row ${index + 1} parsed time range:`, timeRange);
+                                
+                                if (timeRange.start && timeRange.end) {
+                                    // Convert date format: 2025/7/30 -> 2025-07-30
+                                    const normalizedDate = normalizeDateString(dateStr);
+                                    console.log(`🚨 [csv] Row ${index + 1} normalized date:`, normalizedDate);
+                                    
+                                    if (normalizedDate) {
+                                        start = `${normalizedDate}T${timeRange.start}:00`;
+                                        end = `${normalizedDate}T${timeRange.end}:00`;
+                                        console.log(`🚨 [csv] Row ${index + 1} constructed datetime:`, { start, end });
+                                    }
+                                }
+                            }
+                            
+                            // 3. FALLBACK: Extract from any text field that looks like a title
+                            if (!name) {
+                                // Try to find any text field that could be a name/title
+                                const textFields = Object.keys(row).filter(key => 
+                                    key.includes('text') && row[key] && row[key].trim().length > 0
+                                );
+                                if (textFields.length > 0) {
+                                    name = row[textFields[0]];
+                                    console.log(`🚨 [csv] Row ${index + 1} fallback name from ${textFields[0]}:`, name);
+                                }
+                            }
+                            
+                            // 4. FALLBACK: Use default room if not found
+                            if (!room) {
+                                room = '会議室(さくら)'; // Default room
+                                console.log(`🚨 [csv] Row ${index + 1} using default room:`, room);
+                            }
+                            
+                            console.log(`🚨 [csv] Row ${index + 1} final extracted data:`, {
+                                room, name, start, end
+                            });
+                            
+                            // 5. VALIDATION with detailed error reporting
                             const rowErrors = [];
                             if (!room) rowErrors.push('部屋/施設が未入力');
                             if (!name) rowErrors.push('氏名/予約者が未入力');
                             if (!start) rowErrors.push('開始/開始時刻が未入力');
                             if (!end) rowErrors.push('終了/終了時刻が未入力');
                             
-                            // Validate date format
-                            if (start && isNaN(Date.parse(start))) {
-                                rowErrors.push('開始日時の形式が不正');
+                            // Enhanced date validation
+                            let startDate = null, endDate = null;
+                            if (start) {
+                                startDate = new Date(start);
+                                if (isNaN(startDate.getTime())) {
+                                    rowErrors.push(`開始日時の形式が不正: ${start}`);
+                                    startDate = null;
+                                }
                             }
-                            if (end && isNaN(Date.parse(end))) {
-                                rowErrors.push('終了日時の形式が不正');
+                            if (end) {
+                                endDate = new Date(end);
+                                if (isNaN(endDate.getTime())) {
+                                    rowErrors.push(`終了日時の形式が不正: ${end}`);
+                                    endDate = null;
+                                }
                             }
                             
-                            if (rowErrors.length === 0) {
+                            console.log(`🚨 [csv] Row ${index + 1} validation errors:`, rowErrors);
+                            
+                            if (rowErrors.length === 0 && startDate && endDate) {
                                 const eventObj = {
-                                    id: `csv_${Date.now()}_${index}`,
+                                    id: `csv_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`,
                                     room: room,
                                     name: name,
-                                    start: new Date(start).toISOString(),
-                                    end: new Date(end).toISOString()
+                                    start: startDate.toISOString(),
+                                    end: endDate.toISOString()
                                 };
                                 validEvents.push(eventObj);
                                 console.log(`🚨 [csv] ✅ Row ${index + 1} valid event created:`, eventObj);
@@ -390,13 +467,85 @@
                             }
                         });
                         
+                        // 🚨 UTILITY FUNCTIONS FOR DATE/TIME PARSING
+                        function parseTimeRange(timeStr) {
+                            if (!timeStr) return { start: null, end: null };
+                            
+                            console.log(`🚨 [csv] Parsing time string: "${timeStr}"`);
+                            
+                            // Replace full-width colons and various separators
+                            const normalized = timeStr.replace(/：/g, ':').replace(/〜/g, '～').replace(/-/g, '～');
+                            console.log(`🚨 [csv] Normalized time string: "${normalized}"`);
+                            
+                            // Split by common separators
+                            let parts = normalized.split('～');
+                            if (parts.length === 1) parts = normalized.split('-');
+                            if (parts.length === 1) parts = normalized.split('~');
+                            
+                            console.log(`🚨 [csv] Time parts after split:`, parts);
+                            
+                            if (parts.length === 2) {
+                                const start = parts[0].trim();
+                                const end = parts[1].trim();
+                                
+                                // Ensure HH:MM format
+                                const formatTime = (time) => {
+                                    if (time.includes(':')) return time;
+                                    if (time.length === 4) return `${time.substr(0, 2)}:${time.substr(2, 2)}`;
+                                    if (time.length === 3) return `${time.substr(0, 1)}:${time.substr(1, 2)}`;
+                                    return time;
+                                };
+                                
+                                const formattedStart = formatTime(start);
+                                const formattedEnd = formatTime(end);
+                                
+                                console.log(`🚨 [csv] Formatted time range:`, { start: formattedStart, end: formattedEnd });
+                                return { start: formattedStart, end: formattedEnd };
+                            }
+                            
+                            console.log(`🚨 [csv] Failed to parse time range`);
+                            return { start: null, end: null };
+                        }
+                        
+                        function normalizeDateString(dateStr) {
+                            if (!dateStr) return null;
+                            
+                            console.log(`🚨 [csv] Normalizing date string: "${dateStr}"`);
+                            
+                            // Handle various date formats: YYYY/M/D, YYYY-M-D, etc.
+                            let normalized = dateStr.replace(/[\/\-]/g, '-');
+                            
+                            // Ensure YYYY-MM-DD format
+                            const parts = normalized.split('-');
+                            if (parts.length === 3) {
+                                const year = parts[0].padStart(4, '0');
+                                const month = parts[1].padStart(2, '0');
+                                const day = parts[2].padStart(2, '0');
+                                normalized = `${year}-${month}-${day}`;
+                            }
+                            
+                            console.log(`🚨 [csv] Normalized date: "${normalized}"`);
+                            return normalized;
+                        }
+                        
                         console.log('🚨 [csv] FINAL VALIDATION RESULTS:');
                         console.log('🚨 [csv] Valid events for API submission:', validEvents);
                         console.log('🚨 [csv] Valid events count:', validEvents.length);
                         console.log('🚨 [csv] Invalid rows count:', errors.length);
                         
                         if (validEvents.length === 0) {
-                            showStatusBadge('取り込み可能なデータがありません', 'error');
+                            console.error('🚨 [csv] ❌ NO VALID EVENTS FOUND - DETAILED ANALYSIS:');
+                            console.error('🚨 [csv] ❌ Total rows processed:', results.data.length);
+                            console.error('🚨 [csv] ❌ CSV Headers detected:', Object.keys(results.data[0] || {}));
+                            console.error('🚨 [csv] ❌ All validation errors:', errors);
+                            console.error('🚨 [csv] ❌ Sample row data:', results.data[0]);
+                            
+                            // Show detailed error message
+                            const errorSummary = errors.length > 0 
+                                ? `検証エラー: ${errors.slice(0, 3).map(e => e.errors.join(', ')).join(' | ')}`
+                                : 'CSVデータが認識できませんでした';
+                            
+                            showStatusBadge(`取り込み可能なデータがありません - ${errorSummary}`, 'error');
                             return;
                         }
                         
