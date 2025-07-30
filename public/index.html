@@ -273,8 +273,8 @@
         // 🚨 DEFINE FUNCTIONS IMMEDIATELY AND REGISTER TO WINDOW
         // This happens BEFORE DOMContentLoaded
         
-        window.uploadCSV = function() {
-            console.log('🚨 [csv] uploadCSV function called - WINDOW VERSION');
+        window.uploadCSV = async function() {
+            console.log('🚨 [csv] uploadCSV function called - FULL IMPLEMENTATION');
             
             const fileInput = document.getElementById('csvFile');
             const uploadBtn = document.getElementById('csvUploadBtn');
@@ -290,17 +290,178 @@
                 uploadBtn.textContent = '読み込み中...';
             }
             
-            // CSV processing logic would go here
-            console.log('🚨 [csv] CSV processing started');
-            
-            // For now, just show success
-            setTimeout(() => {
+            try {
+                console.log('🚨 [csv] Reading file:', file.name, 'Size:', file.size);
+                
+                // Read file as array buffer
+                const arrayBuffer = await file.arrayBuffer();
+                const uint8Array = new Uint8Array(arrayBuffer);
+                
+                // Detect encoding and convert to UTF-8
+                let text;
+                if (typeof Encoding !== 'undefined') {
+                    const detectedEncoding = Encoding.detect(uint8Array);
+                    console.log('🚨 [csv] Detected encoding:', detectedEncoding);
+                    
+                    if (detectedEncoding === 'SJIS' || detectedEncoding === 'EUCJP') {
+                        const unicodeArray = Encoding.convert(uint8Array, {
+                            to: 'UNICODE',
+                            from: detectedEncoding
+                        });
+                        text = Encoding.codeToString(unicodeArray);
+                    } else {
+                        text = new TextDecoder('utf-8').decode(arrayBuffer);
+                    }
+                } else {
+                    console.warn('🚨 [csv] Encoding library not available, using UTF-8');
+                    text = new TextDecoder('utf-8').decode(arrayBuffer);
+                }
+                
+                console.log('🚨 [csv] CSV text length:', text.length);
+                console.log('🚨 [csv] CSV first 200 chars:', text.substring(0, 200));
+                
+                // Parse CSV using PapaParse
+                if (typeof Papa === 'undefined') {
+                    console.error('🚨 [csv] PapaParse library not available');
+                    showStatusBadge('PapaParseライブラリが読み込まれていません', 'error');
+                    return;
+                }
+                
+                Papa.parse(text, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: async function(results) {
+                        console.log('🚨 [csv] ✅ CSV parsed successfully');
+                        console.log('🚨 [csv] Raw parsed CSV data:', results.data);
+                        console.log('🚨 [csv] Number of rows:', results.data.length);
+                        
+                        if (results.errors && results.errors.length > 0) {
+                            console.warn('🚨 [csv] Parse warnings:', results.errors);
+                        }
+                        
+                        // Validate and convert CSV data
+                        const validEvents = [];
+                        const errors = [];
+                        
+                        results.data.forEach((row, index) => {
+                            console.log(`🚨 [csv] Processing row ${index + 1}:`, row);
+                            
+                            // Extract data with multiple column name variations
+                            const room = row['部屋'] || row['施設'] || row['Room'];
+                            const name = row['氏名'] || row['予約者'] || row['Name'];
+                            const start = row['開始'] || row['開始時刻'] || row['Start'];
+                            const end = row['終了'] || row['終了時刻'] || row['End'];
+                            
+                            console.log(`🚨 [csv] Row ${index + 1} extracted - Room:${room}, Name:${name}, Start:${start}, End:${end}`);
+                            
+                            // Validate required fields
+                            const rowErrors = [];
+                            if (!room) rowErrors.push('部屋/施設が未入力');
+                            if (!name) rowErrors.push('氏名/予約者が未入力');
+                            if (!start) rowErrors.push('開始/開始時刻が未入力');
+                            if (!end) rowErrors.push('終了/終了時刻が未入力');
+                            
+                            // Validate date format
+                            if (start && isNaN(Date.parse(start))) {
+                                rowErrors.push('開始日時の形式が不正');
+                            }
+                            if (end && isNaN(Date.parse(end))) {
+                                rowErrors.push('終了日時の形式が不正');
+                            }
+                            
+                            if (rowErrors.length === 0) {
+                                const eventObj = {
+                                    id: `csv_${Date.now()}_${index}`,
+                                    room: room,
+                                    name: name,
+                                    start: new Date(start).toISOString(),
+                                    end: new Date(end).toISOString()
+                                };
+                                validEvents.push(eventObj);
+                                console.log(`🚨 [csv] ✅ Row ${index + 1} valid event created:`, eventObj);
+                            } else {
+                                const errorObj = {
+                                    line: index + 2, // +2 for header and 0-based index
+                                    errors: rowErrors,
+                                    data: row
+                                };
+                                errors.push(errorObj);
+                                console.warn(`🚨 [csv] ❌ Row ${index + 1} validation failed:`, errorObj);
+                            }
+                        });
+                        
+                        console.log('🚨 [csv] FINAL VALIDATION RESULTS:');
+                        console.log('🚨 [csv] Valid events for API submission:', validEvents);
+                        console.log('🚨 [csv] Valid events count:', validEvents.length);
+                        console.log('🚨 [csv] Invalid rows count:', errors.length);
+                        
+                        if (validEvents.length === 0) {
+                            showStatusBadge('取り込み可能なデータがありません', 'error');
+                            return;
+                        }
+                        
+                        // Send to API with bulk flag
+                        try {
+                            console.log('🚨 [csv] Sending to API /api/logo?bulk=1 with', validEvents.length, 'events');
+                            
+                            const response = await fetch('/api/logo?bulk=1', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({ events: validEvents })
+                            });
+                            
+                            console.log('🚨 [csv] API response status:', response.status);
+                            console.log('🚨 [csv] API response ok:', response.ok);
+                            
+                            const result = await response.json();
+                            console.log('🚨 [csv] API response data:', result);
+                            
+                            if (response.ok) {
+                                const message = errors.length > 0 
+                                    ? `${result.imported || validEvents.length}件取り込み完了 / ${errors.length}件スキップ`
+                                    : `${result.imported || validEvents.length}件取り込み完了`;
+                                    
+                                console.log('🚨 [csv] ✅ SUCCESS:', message);
+                                showStatusBadge(message, 'success');
+                                
+                                // Refresh calendar to show new events
+                                console.log('🚨 [csv] Refreshing calendar with new events...');
+                                setTimeout(() => fetchEvents(), 1000);
+                                
+                                // Clear file input
+                                if (fileInput) fileInput.value = '';
+                            } else {
+                                console.error('🚨 [csv] ❌ API ERROR:', result);
+                                if (response.status === 422) {
+                                    showStatusBadge('CSVエラー: 詳細はコンソール', 'error');
+                                } else {
+                                    showStatusBadge('サーバエラーが発生しました', 'error');
+                                }
+                            }
+                            
+                        } catch (apiError) {
+                            console.error('🚨 [csv] ❌ API request failed:', apiError);
+                            showStatusBadge('サーバとの通信エラーが発生しました', 'error');
+                        }
+                    },
+                    error: function(error) {
+                        console.error('🚨 [csv] ❌ CSV parse error:', error);
+                        showStatusBadge('CSVファイルの解析に失敗しました', 'error');
+                    }
+                });
+                
+            } catch (fileError) {
+                console.error('🚨 [csv] ❌ File read error:', fileError);
+                showStatusBadge('ファイルの読み込みに失敗しました', 'error');
+            } finally {
+                // Re-enable button
                 if (uploadBtn) {
                     uploadBtn.disabled = false;
                     uploadBtn.textContent = '📄 CSV 取り込み';
                 }
-                showStatusBadge('テスト：CSV機能が動作しています', 'success');
-            }, 1000);
+            }
         };
         
         window.toggleAdminMode = function() {
