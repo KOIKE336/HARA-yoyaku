@@ -350,124 +350,188 @@
                             console.log(`🚨 [csv] Processing row ${index + 1}:`, row);
                             console.log(`🚨 [csv] Row ${index + 1} object keys:`, Object.keys(row));
                             
-                            // 1. ENHANCED DATA EXTRACTION with comprehensive column mapping
-                            let room, name, start, end, dateStr, timeStr;
+                            // 1. REAL CSV STRUCTURE ANALYSIS - Based on actual form data
+                            console.log(`🚨 [csv] Row ${index + 1} raw data sample:`, Object.keys(row).slice(0, 10));
                             
-                            // Room/Facility detection
-                            room = row['部屋'] || row['施設'] || row['Room'] || row['会議室'] || row['場所'];
+                            let events = []; // Multiple events per row (multiple time slots)
                             
-                            // Name detection with more variations
-                            name = row['氏名'] || row['予約者'] || row['Name'] || row['申込者'] || row['利用者'] || 
-                                   row['244:lastname'] && row['244:firstname'] ? `${row['244:lastname']}${row['244:firstname']}` :
-                                   row['91:lastname'] && row['91:firstname'] ? `${row['91:lastname']}${row['91:firstname']}` :
-                                   row['242:lastname'] && row['242:firstname'] ? `${row['242:lastname']}${row['242:firstname']}` :
-                                   row['92:text'] || row['93:text'] || row['102:text'];
+                            // 🚨 ACTUAL CSV COLUMN MAPPING based on form structure
+                            // Date extraction: '5:date' column contains date like "2025/7/30"
+                            const dateStr = row['5:date'];
+                            console.log(`🚨 [csv] Row ${index + 1} extracted date from '5:date':`, dateStr);
                             
-                            // Date detection from various formats
-                            dateStr = row['5:date'] || row['日付'] || row['利用日'] || row['予約日'];
+                            // Name extraction: Combine lastname + firstname from various form fields
+                            let name = '';
+                            if (row['244:lastname'] && row['244:firstname']) {
+                                name = `${row['244:lastname']}${row['244:firstname']}`;
+                            } else if (row['91:lastname'] && row['91:firstname']) {
+                                name = `${row['91:lastname']}${row['91:firstname']}`;
+                            } else if (row['242:lastname'] && row['242:firstname']) {
+                                name = `${row['242:lastname']}${row['242:firstname']}`;
+                            } else {
+                                // Fallback to text fields
+                                name = row['92:text'] || row['93:text'] || row['102:text'] || '予約者';
+                            }
+                            console.log(`🚨 [csv] Row ${index + 1} extracted name:`, name);
                             
-                            // Direct datetime detection (simple format)
-                            start = row['開始'] || row['開始時刻'] || row['Start'];
-                            end = row['終了'] || row['終了時刻'] || row['End'];
+                            // Title/Purpose extraction
+                            const purpose = row['使用目的と活動内容を入力してください。'] || 
+                                          row['92:text'] || row['93:text'] || 
+                                          row['102:text'] || row['105:text'] || 
+                                          name || '施設利用';
+                            console.log(`🚨 [csv] Row ${index + 1} extracted purpose:`, purpose);
                             
-                            // Time range detection for complex formats
-                            timeStr = row['時間'] || row['利用時間'] || row['予約時間'];
+                            // 🚨 ROOM AND TIME DETECTION - Check each room's time column
+                            const roomTimeMapping = [
+                                {
+                                    room: '会議室(さくら)',
+                                    timeColumn: '会議室(さくら)の予約したい時間を選択してください。 [※仕様上30分単位の選択項目ですが、必ず連続した1時間単位で予約してください。]'
+                                },
+                                {
+                                    room: '相談室(スミレ・コスモス)',
+                                    timeColumn: '相談室(スミレ・コスモス)の予約したい時間を選択してください。 [※仕様上30分単位の選択項目ですが、必ず連続した1時間単位で予約してください。]'
+                                },
+                                {
+                                    room: 'テレワークルームA',
+                                    timeColumn: 'テレワークルームAの予約したい時間を選択してください。 [※仕様上30分単位の選択項目ですが、必ず連続した1時間単位で予約してください。]'
+                                },
+                                {
+                                    room: 'テレワークルームB',
+                                    timeColumn: 'テレワークルームBの予約したい時間を選択してください。 [※仕様上30分単位の選択項目ですが、必ず連続した1時間単位で予約してください。]'
+                                }
+                            ];
                             
-                            console.log(`🚨 [csv] Row ${index + 1} initial extraction:`, {
-                                room, name, start, end, dateStr, timeStr
-                            });
+                            // Try to find matching columns with similar names if exact match fails
+                            const allColumns = Object.keys(row);
                             
-                            // 2. ADVANCED DATE/TIME PARSING
-                            if (!start && !end && dateStr && timeStr) {
-                                console.log(`🚨 [csv] Row ${index + 1} attempting advanced date/time parsing...`);
+                            roomTimeMapping.forEach(mapping => {
+                                let timeValue = row[mapping.timeColumn];
                                 
-                                // Parse time range like "12：30～13：00" or "12:30-13:00"
-                                const timeRange = parseTimeRange(timeStr);
-                                console.log(`🚨 [csv] Row ${index + 1} parsed time range:`, timeRange);
-                                
-                                if (timeRange.start && timeRange.end) {
-                                    // Convert date format: 2025/7/30 -> 2025-07-30
-                                    const normalizedDate = normalizeDateString(dateStr);
-                                    console.log(`🚨 [csv] Row ${index + 1} normalized date:`, normalizedDate);
-                                    
-                                    if (normalizedDate) {
-                                        start = `${normalizedDate}T${timeRange.start}:00`;
-                                        end = `${normalizedDate}T${timeRange.end}:00`;
-                                        console.log(`🚨 [csv] Row ${index + 1} constructed datetime:`, { start, end });
+                                // If exact column not found, try to find similar column
+                                if (!timeValue) {
+                                    const similarColumn = allColumns.find(col => 
+                                        col.includes(mapping.room) && col.includes('時間')
+                                    );
+                                    if (similarColumn) {
+                                        timeValue = row[similarColumn];
+                                        console.log(`🚨 [csv] Found similar column for ${mapping.room}: ${similarColumn}`);
                                     }
                                 }
-                            }
-                            
-                            // 3. FALLBACK: Extract from any text field that looks like a title
-                            if (!name) {
-                                // Try to find any text field that could be a name/title
-                                const textFields = Object.keys(row).filter(key => 
-                                    key.includes('text') && row[key] && row[key].trim().length > 0
-                                );
-                                if (textFields.length > 0) {
-                                    name = row[textFields[0]];
-                                    console.log(`🚨 [csv] Row ${index + 1} fallback name from ${textFields[0]}:`, name);
+                                
+                                console.log(`🚨 [csv] Row ${index + 1} ${mapping.room} time value:`, timeValue);
+                                
+                                if (timeValue && dateStr) {
+                                    // Parse multiple time slots separated by semicolon
+                                    const timeSlots = parseMultipleTimeSlots(timeValue);
+                                    console.log(`🚨 [csv] Row ${index + 1} ${mapping.room} parsed time slots:`, timeSlots);
+                                    
+                                    timeSlots.forEach(timeSlot => {
+                                        const eventObj = createEventFromTimeSlot(
+                                            row, index, mapping.room, name, purpose, dateStr, timeSlot
+                                        );
+                                        if (eventObj) {
+                                            events.push(eventObj);
+                                            console.log(`🚨 [csv] ✅ Created event for ${mapping.room}:`, eventObj);
+                                        }
+                                    });
                                 }
-                            }
-                            
-                            // 4. FALLBACK: Use default room if not found
-                            if (!room) {
-                                room = '会議室(さくら)'; // Default room
-                                console.log(`🚨 [csv] Row ${index + 1} using default room:`, room);
-                            }
-                            
-                            console.log(`🚨 [csv] Row ${index + 1} final extracted data:`, {
-                                room, name, start, end
                             });
                             
-                            // 5. VALIDATION with detailed error reporting
-                            const rowErrors = [];
-                            if (!room) rowErrors.push('部屋/施設が未入力');
-                            if (!name) rowErrors.push('氏名/予約者が未入力');
-                            if (!start) rowErrors.push('開始/開始時刻が未入力');
-                            if (!end) rowErrors.push('終了/終了時刻が未入力');
+                            console.log(`🚨 [csv] Row ${index + 1} total events created:`, events.length);
                             
-                            // Enhanced date validation
-                            let startDate = null, endDate = null;
-                            if (start) {
-                                startDate = new Date(start);
-                                if (isNaN(startDate.getTime())) {
-                                    rowErrors.push(`開始日時の形式が不正: ${start}`);
-                                    startDate = null;
+                            // Add all events from this row to the main validEvents array
+                            events.forEach(event => {
+                                if (event) {
+                                    validEvents.push(event);
+                                    console.log(`🚨 [csv] ✅ Added event to validEvents:`, event);
                                 }
-                            }
-                            if (end) {
-                                endDate = new Date(end);
-                                if (isNaN(endDate.getTime())) {
-                                    rowErrors.push(`終了日時の形式が不正: ${end}`);
-                                    endDate = null;
-                                }
-                            }
+                            });
                             
-                            console.log(`🚨 [csv] Row ${index + 1} validation errors:`, rowErrors);
-                            
-                            if (rowErrors.length === 0 && startDate && endDate) {
-                                const eventObj = {
-                                    id: `csv_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 9)}`,
-                                    room: room,
-                                    name: name,
-                                    start: startDate.toISOString(),
-                                    end: endDate.toISOString()
-                                };
-                                validEvents.push(eventObj);
-                                console.log(`🚨 [csv] ✅ Row ${index + 1} valid event created:`, eventObj);
-                            } else {
+                            // Log if no events were created from this row
+                            if (events.length === 0) {
                                 const errorObj = {
-                                    line: index + 2, // +2 for header and 0-based index
-                                    errors: rowErrors,
-                                    data: row
+                                    line: index + 2,
+                                    errors: ['日付または時間データが見つかりません'],
+                                    data: {
+                                        date: dateStr,
+                                        name: name,
+                                        purpose: purpose,
+                                        availableColumns: Object.keys(row).filter(k => row[k]).slice(0, 10)
+                                    }
                                 };
                                 errors.push(errorObj);
-                                console.warn(`🚨 [csv] ❌ Row ${index + 1} validation failed:`, errorObj);
+                                console.warn(`🚨 [csv] ❌ Row ${index + 1} produced no events:`, errorObj);
                             }
                         });
                         
-                        // 🚨 UTILITY FUNCTIONS FOR DATE/TIME PARSING
+                        // 🚨 NEW UTILITY FUNCTIONS FOR COMPLEX CSV PROCESSING
+                        
+                        function parseMultipleTimeSlots(timeValue) {
+                            if (!timeValue) return [];
+                            
+                            console.log(`🚨 [csv] Parsing multiple time slots from: "${timeValue}"`);
+                            
+                            // Split by semicolon for multiple time slots
+                            const slots = timeValue.split(';').map(slot => slot.trim()).filter(slot => slot);
+                            console.log(`🚨 [csv] Split time slots:`, slots);
+                            
+                            const parsedSlots = [];
+                            
+                            slots.forEach(slot => {
+                                const timeRange = parseTimeRange(slot);
+                                if (timeRange.start && timeRange.end) {
+                                    parsedSlots.push(timeRange);
+                                }
+                            });
+                            
+                            console.log(`🚨 [csv] Parsed time slots:`, parsedSlots);
+                            return parsedSlots;
+                        }
+                        
+                        function createEventFromTimeSlot(row, rowIndex, room, name, purpose, dateStr, timeSlot) {
+                            try {
+                                // Normalize date format
+                                const normalizedDate = normalizeDateString(dateStr);
+                                if (!normalizedDate) {
+                                    console.warn(`🚨 [csv] Failed to normalize date: ${dateStr}`);
+                                    return null;
+                                }
+                                
+                                // Create ISO datetime strings
+                                const startDateTime = `${normalizedDate}T${timeSlot.start}:00`;
+                                const endDateTime = `${normalizedDate}T${timeSlot.end}:00`;
+                                
+                                // Validate dates
+                                const startDate = new Date(startDateTime);
+                                const endDate = new Date(endDateTime);
+                                
+                                if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+                                    console.warn(`🚨 [csv] Invalid date created:`, { startDateTime, endDateTime });
+                                    return null;
+                                }
+                                
+                                // Create unique ID
+                                const eventId = row['回答番号'] || row['受付番号'] || 
+                                              `csv_${Date.now()}_${rowIndex}_${Math.random().toString(36).substr(2, 9)}`;
+                                
+                                const eventObj = {
+                                    id: `${eventId}_${room}_${timeSlot.start}`,
+                                    room: room,
+                                    name: purpose || name || '施設利用',
+                                    start: startDate.toISOString(),
+                                    end: endDate.toISOString()
+                                };
+                                
+                                console.log(`🚨 [csv] Created event object:`, eventObj);
+                                return eventObj;
+                                
+                            } catch (error) {
+                                console.error(`🚨 [csv] Error creating event:`, error);
+                                return null;
+                            }
+                        }
+                        
+                        // 🚨 ENHANCED UTILITY FUNCTIONS FOR DATE/TIME PARSING
                         function parseTimeRange(timeStr) {
                             if (!timeStr) return { start: null, end: null };
                             
