@@ -54,13 +54,13 @@ export default async function handler(req, res) {
       console.log('[kv] 🚨 Processing', data.events.length, 'events for bulk import');
       let importedCount = 0;
       
-      // 各イベントを処理
-      data.events.forEach((eventData, index) => {
+      // 各イベントを処理 - forEach を for...of に変更して同期処理を確実にする
+      for (const [index, eventData] of data.events.entries()) {
         console.log(`[kv] 🚨 Processing bulk event ${index + 1}:`, eventData);
         
         if (!eventData.id || !eventData.room || !eventData.name || !eventData.start || !eventData.end) {
           console.warn(`[kv] ❌ Skipping invalid event ${index + 1}: missing required fields`);
-          return;
+          continue;
         }
         
         const event = {
@@ -81,10 +81,22 @@ export default async function handler(req, res) {
         }
         
         importedCount++;
-      });
+      }
       
-      await kv.set('events', events);
-      console.log('[kv] ✅ BULK IMPORT SUCCESS:', importedCount, 'events imported, total:', events.length);
+      // KV書き込みにエラーハンドリングを追加
+      try {
+        await kv.set('events', events);
+        console.log('[kv] ✅ BULK IMPORT SUCCESS:', importedCount, 'events imported, total:', events.length);
+      } catch (kvError) {
+        console.error('[kv] ❌ KV WRITE ERROR during bulk import:', kvError.message);
+        console.error('[kv] ❌ KV WRITE Stack trace:', kvError.stack);
+        return res.status(500).json({ 
+          error: 'Database write failed', 
+          details: kvError.message,
+          imported: 0,
+          total: events.length 
+        });
+      }
       
       res.status(200).json({ 
         status: 'ok', 
