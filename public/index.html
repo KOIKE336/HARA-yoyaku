@@ -437,117 +437,110 @@
                                 return;
                             }
                             
-                            // 5. COMPREHENSIVE ROOM AND TIME DETECTION WITH EXACT HEADER MATCHING
-                            console.log(`🚨 [csv] ===== ROOM TIME DETECTION FOR ROW ${index + 1} =====`);
+                            // 5. CORRECTED ROOM AND TIME DETECTION USING ACTUAL CSV KEYS
+                            console.log(`🚨 [csv] ===== ROOM TIME DETECTION FOR ROW ${index + 1} (USING REAL CSV KEYS) =====`);
+                            console.log(`🚨 [csv] Row data with values (first 30):`, Object.fromEntries(Object.entries(row).slice(0, 30)));
                             
                             let rowEvents = [];
                             
-                            // 🚨 EXACT CSV HEADER STRINGS - Copy-pasted from actual CSV
-                            const exactRoomTimeColumns = [
-                                {
-                                    room: '会議室(さくら)',
-                                    exactColumnName: '会議室(さくら)の予約したい時間を選択してください。 [※仕様上30分単位の選択項目ですが、必ず連続した1時間単位で予約してください。]'
-                                },
-                                {
-                                    room: '相談室(スミレ・コスモス)',
-                                    exactColumnName: '相談室(スミレ・コスモス)の予約したい時間を選択してください。 [※仕様上30分単位の選択項目ですが、必ず連続した1時間単位で予約してください。]'
-                                },
-                                {
-                                    room: 'テレワークルームA',
-                                    exactColumnName: 'テレワークルームAの予約したい時間を選択してください。 [※仕様上30分単位の選択項目ですが、必ず連続した1時間単位で予約してください。]'
-                                },
-                                {
-                                    room: 'テレワークルームB',
-                                    exactColumnName: 'テレワークルームBの予約したい時間を選択してください。 [※仕様上30分単位の選択項目ですが、必ず連続した1時間単位で予約してください。]'
-                                }
-                            ];
+                            // 🚨 STEP 1: Extract room name from '1:checkbox' column
+                            let roomName = '';
+                            const roomCheckboxValue = row['1:checkbox'];
+                            console.log(`🚨 [csv] Extracted room checkbox value (1:checkbox):`, roomCheckboxValue);
                             
-                            console.log(`🚨 [csv] Checking exact room time columns for row ${index + 1}...`);
-                            
-                            // Check each exact column name
-                            exactRoomTimeColumns.forEach(roomConfig => {
-                                console.log(`🚨 [csv] --- Checking exact column for ${roomConfig.room} ---`);
-                                console.log(`🚨 [csv] Looking for exact column: "${roomConfig.exactColumnName}"`);
-                                console.log(`🚨 [csv] Column exists in row:`, roomConfig.exactColumnName in row);
-                                
-                                const timeValue = row[roomConfig.exactColumnName];
-                                console.log(`🚨 [csv] Time value for ${roomConfig.room}:`, timeValue);
-                                
-                                if (timeValue && timeValue.trim() !== '') {
-                                    console.log(`🚨 [csv] ✅ Found time data for ${roomConfig.room}: "${timeValue}"`);
-                                    
-                                    // Parse the semicolon-separated time values
-                                    const timeSlots = parseComplexTimeValue(timeValue);
-                                    console.log(`🚨 [csv] Parsed ${timeSlots.length} time slots for ${roomConfig.room}:`, timeSlots);
-                                    
-                                    // Create events for each time slot
-                                    timeSlots.forEach((timeSlot, slotIndex) => {
-                                        console.log(`🚨 [csv] Creating event ${slotIndex + 1} for ${roomConfig.room} with slot:`, timeSlot);
-                                        
-                                        const eventObj = createCompleteEvent(
-                                            eventId, 
-                                            roomConfig.room, 
-                                            eventTitle, 
-                                            dateStr, 
-                                            timeSlot, 
-                                            index, 
-                                            slotIndex
-                                        );
-                                        
-                                        if (eventObj) {
-                                            rowEvents.push(eventObj);
-                                            console.log(`🚨 [csv] ✅ Successfully created event ${slotIndex + 1} for ${roomConfig.room}:`, eventObj);
-                                        } else {
-                                            console.error(`🚨 [csv] ❌ Failed to create event for ${roomConfig.room}, slot ${slotIndex + 1}`);
-                                        }
-                                    });
+                            if (roomCheckboxValue) {
+                                // Remove text in brackets like "【1時間100円】"
+                                if (roomCheckboxValue.includes('【')) {
+                                    roomName = roomCheckboxValue.split('【')[0].trim();
                                 } else {
-                                    console.log(`🚨 [csv] No time data found for ${roomConfig.room} (value: "${timeValue}")`);
+                                    roomName = roomCheckboxValue.trim();
                                 }
-                            });
-                            
-                            // 🚨 FALLBACK: Dynamic search for room-related columns if exact match fails
-                            if (rowEvents.length === 0) {
-                                console.log(`🚨 [csv] ⚠️ No events created with exact matching, trying dynamic search...`);
                                 
-                                Object.entries(row).forEach(([columnName, columnValue]) => {
-                                    // Check if column name contains room-related keywords and has data
-                                    if (columnValue && columnValue.trim() !== '' && 
-                                        (columnName.includes('会議室') || columnName.includes('相談室') || 
-                                         columnName.includes('テレワーク') || columnName.includes('時間'))) {
-                                        
-                                        console.log(`🚨 [csv] Found potential room column: "${columnName}" with value: "${columnValue}"`);
-                                        
-                                        // Extract room name from column name
-                                        let roomName = 'Unknown Room';
-                                        if (columnName.includes('会議室(さくら)')) roomName = '会議室(さくら)';
-                                        else if (columnName.includes('相談室(スミレ・コスモス)')) roomName = '相談室(スミレ・コスモス)';
-                                        else if (columnName.includes('テレワークルームA')) roomName = 'テレワークルームA';
-                                        else if (columnName.includes('テレワークルームB')) roomName = 'テレワークルームB';
-                                        
-                                        console.log(`🚨 [csv] Extracted room name: "${roomName}"`);
-                                        
-                                        const timeSlots = parseComplexTimeValue(columnValue);
-                                        console.log(`🚨 [csv] Parsed ${timeSlots.length} time slots from dynamic search:`, timeSlots);
-                                        
-                                        timeSlots.forEach((timeSlot, slotIndex) => {
-                                            const eventObj = createCompleteEvent(
-                                                eventId, 
-                                                roomName, 
-                                                eventTitle, 
-                                                dateStr, 
-                                                timeSlot, 
-                                                index, 
-                                                slotIndex
-                                            );
-                                            
-                                            if (eventObj) {
-                                                rowEvents.push(eventObj);
-                                                console.log(`🚨 [csv] ✅ Created event via dynamic search for ${roomName}:`, eventObj);
-                                            }
-                                        });
+                                // Normalize room names
+                                if (roomName.includes('会議室') && roomName.includes('さくら')) {
+                                    roomName = '会議室(さくら)';
+                                } else if (roomName.includes('相談室') && (roomName.includes('スミレ') || roomName.includes('コスモス'))) {
+                                    roomName = '相談室(スミレ・コスモス)';
+                                } else if (roomName.includes('テレワークルームA')) {
+                                    roomName = 'テレワークルームA';
+                                } else if (roomName.includes('テレワークルームB')) {
+                                    roomName = 'テレワークルームB';
+                                }
+                                
+                                console.log(`🚨 [csv] Final determined roomName:`, roomName);
+                            }
+                            
+                            // 🚨 STEP 2: Extract time data from checkbox columns
+                            let timeValue = '';
+                            let timeColumnUsed = '';
+                            
+                            // Check time data columns in order based on log analysis
+                            const timeColumns = ['7:checkbox', '8:checkbox', '234:checkbox', '235:checkbox'];
+                            
+                            for (const timeCol of timeColumns) {
+                                const timeData = row[timeCol];
+                                console.log(`🚨 [csv] Checking time column '${timeCol}':`, timeData);
+                                
+                                if (timeData && timeData.trim() !== '') {
+                                    timeValue = timeData;
+                                    timeColumnUsed = timeCol;
+                                    console.log(`🚨 [csv] ✅ Found time data in column '${timeCol}': "${timeValue}"`);
+                                    
+                                    // If room name is not determined from 1:checkbox, infer from time column
+                                    if (!roomName) {
+                                        if (timeCol === '7:checkbox') roomName = '会議室(さくら)';
+                                        else if (timeCol === '8:checkbox') roomName = '相談室(スミレ・コスモス)';
+                                        else if (timeCol === '234:checkbox') roomName = 'テレワークルームA';
+                                        else if (timeCol === '235:checkbox') roomName = 'テレワークルームB';
+                                        console.log(`🚨 [csv] Inferred roomName from time column: "${roomName}"`);
+                                    }
+                                    
+                                    break; // Use first time data found
+                                }
+                            }
+                            
+                            console.log(`🚨 [csv] Final determined timeValue (raw):`, timeValue);
+                            console.log(`🚨 [csv] Time column used:`, timeColumnUsed);
+                            
+                            // 🚨 STEP 3: Parse time data and create events
+                            if (timeValue && roomName) {
+                                console.log(`🚨 [csv] ✅ Both room and time data found, proceeding with event creation`);
+                                
+                                // Parse the semicolon-separated time values with robust error handling
+                                const timeSlots = parseRobustTimeValue(timeValue);
+                                console.log(`🚨 [csv] Parsed ${timeSlots.length} time slots:`, timeSlots);
+                                
+                                // Create events for each time slot
+                                timeSlots.forEach((timeSlot, slotIndex) => {
+                                    console.log(`🚨 [csv] Creating event ${slotIndex + 1} for ${roomName} with slot:`, timeSlot);
+                                    
+                                    const eventObj = createCompleteEvent(
+                                        eventId, 
+                                        roomName, 
+                                        eventTitle, 
+                                        dateStr, 
+                                        timeSlot, 
+                                        index, 
+                                        slotIndex
+                                    );
+                                    
+                                    if (eventObj) {
+                                        rowEvents.push(eventObj);
+                                        console.log(`🚨 [csv] ✅ Successfully created event ${slotIndex + 1} for ${roomName}:`, eventObj);
+                                    } else {
+                                        console.error(`🚨 [csv] ❌ Failed to create event for ${roomName}, slot ${slotIndex + 1}`);
                                     }
                                 });
+                            } else {
+                                console.error(`🚨 [csv] ❌ Missing required data:`);
+                                console.error(`🚨 [csv] ❌   roomName: "${roomName}"`);
+                                console.error(`🚨 [csv] ❌   timeValue: "${timeValue}"`);
+                                console.error(`🚨 [csv] ❌   roomCheckboxValue: "${roomCheckboxValue}"`);
+                                console.error(`🚨 [csv] ❌   Available time columns:`, timeColumns.map(col => ({ 
+                                    column: col, 
+                                    value: row[col],
+                                    hasData: !!(row[col] && row[col].trim())
+                                })));
                             }
                             
                             console.log(`🚨 [csv] Row ${index + 1} TOTAL EVENTS CREATED: ${rowEvents.length}`);
@@ -574,12 +567,20 @@
                                         name: userName,
                                         title: eventTitle
                                     },
-                                    roomColumnAnalysis: exactRoomTimeColumns.map(config => ({
-                                        room: config.room,
-                                        columnExists: config.exactColumnName in row,
-                                        columnValue: row[config.exactColumnName],
-                                        hasData: !!(row[config.exactColumnName] && row[config.exactColumnName].trim())
-                                    })),
+                                    actualColumnAnalysis: {
+                                        roomCheckbox: {
+                                            column: '1:checkbox',
+                                            exists: '1:checkbox' in row,
+                                            value: row['1:checkbox'],
+                                            hasData: !!(row['1:checkbox'] && row['1:checkbox'].trim())
+                                        },
+                                        timeColumns: ['7:checkbox', '8:checkbox', '234:checkbox', '235:checkbox'].map(col => ({
+                                            column: col,
+                                            exists: col in row,
+                                            value: row[col],
+                                            hasData: !!(row[col] && row[col].trim())
+                                        }))
+                                    },
                                     availableColumnsWithData: Object.entries(row)
                                         .filter(([key, value]) => value && value.trim() !== '')
                                         .slice(0, 20)
@@ -609,7 +610,59 @@
                             console.log(`🚨🚨🚨 [csv] ===== FINISHED PROCESSING ROW ${index + 1} =====`);
                         });
                         
-                        // 🚨 NEW UTILITY FUNCTIONS FOR COMPLEX CSV PROCESSING
+                        // 🚨 NEW UTILITY FUNCTIONS FOR ACTUAL CSV DATA PROCESSING
+                        
+                        function parseRobustTimeValue(timeValue) {
+                            if (!timeValue) return [];
+                            
+                            console.log(`🚨 [csv] parseRobustTimeValue input: "${timeValue}"`);
+                            
+                            // Split by semicolon for multiple time ranges
+                            const timeRanges = timeValue.split(';')
+                                .map(t => t.trim())
+                                .filter(t => t && t.length > 3); // Filter out incomplete times like "11"
+                            
+                            console.log(`🚨 [csv] Split into ${timeRanges.length} time ranges:`, timeRanges);
+                            
+                            const parsedSlots = [];
+                            
+                            timeRanges.forEach((range, idx) => {
+                                console.log(`🚨 [csv] Processing time range ${idx + 1}: "${range}"`);
+                                
+                                // Replace various separators and full-width characters
+                                let normalizedRange = range
+                                    .replace(/：/g, ':')      // Full-width colon to half-width
+                                    .replace(/〜/g, '～')      // Normalize wave dash
+                                    .replace(/−/g, '～')      // Em dash to wave dash
+                                    .replace(/-/g, '～')      // Hyphen to wave dash
+                                    .trim();
+                                
+                                console.log(`🚨 [csv] Normalized range: "${normalizedRange}"`);
+                                
+                                // Split by wave dash or similar
+                                const timeParts = normalizedRange.split('～');
+                                if (timeParts.length === 2) {
+                                    const startTime = timeParts[0].trim();
+                                    const endTime = timeParts[1].trim();
+                                    
+                                    console.log(`🚨 [csv] Extracted times - Start: "${startTime}", End: "${endTime}"`);
+                                    
+                                    // Validate time format (HH:MM)
+                                    const timeRegex = /^\d{1,2}:\d{2}$/;
+                                    if (timeRegex.test(startTime) && timeRegex.test(endTime)) {
+                                        parsedSlots.push({ start: startTime, end: endTime });
+                                        console.log(`🚨 [csv] ✅ Added valid time slot: ${startTime} - ${endTime}`);
+                                    } else {
+                                        console.warn(`🚨 [csv] ❌ Invalid time format - Start: "${startTime}", End: "${endTime}"`);
+                                    }
+                                } else {
+                                    console.warn(`🚨 [csv] ❌ Could not parse time range: "${range}" (parts: ${timeParts.length})`);
+                                }
+                            });
+                            
+                            console.log(`🚨 [csv] parseRobustTimeValue result: ${parsedSlots.length} slots`, parsedSlots);
+                            return parsedSlots;
+                        }
                         
                         function parseComplexTimeValue(timeValue) {
                             if (!timeValue) return [];
