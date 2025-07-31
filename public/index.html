@@ -470,78 +470,149 @@
                                 console.log(`🚨 [csv] Final determined roomName:`, roomName);
                             }
                             
-                            // 🚨 STEP 2: Extract time data from checkbox columns
-                            let timeValue = '';
+                            // 🚨 STEP 2: BULLETPROOF TIME DATA EXTRACTION
+                            console.log(`🚨 [csv] ===== BULLETPROOF TIME DATA EXTRACTION =====`);
+                            
+                            // Define room-time column mappings
+                            const roomTimeColumns = [
+                                { room: '会議室(さくら)', columnKey: '7:checkbox' },
+                                { room: '相談室(スミレ・コスモス)', columnKey: '8:checkbox' },
+                                { room: 'テレワークルームA', columnKey: '234:checkbox' },
+                                { room: 'テレワークルームB', columnKey: '235:checkbox' }
+                            ];
+                            
+                            let foundRoomName = '';
+                            let foundTimeValue = '';
                             let timeColumnUsed = '';
                             
-                            // Check time data columns in order based on log analysis
-                            const timeColumns = ['7:checkbox', '8:checkbox', '234:checkbox', '235:checkbox'];
+                            console.log(`🚨 [csv] Checking all room-time columns for valid data...`);
                             
-                            for (const timeCol of timeColumns) {
-                                const timeData = row[timeCol];
-                                console.log(`🚨 [csv] Checking time column '${timeCol}':`, timeData);
+                            // Check each room-time column for data
+                            for (const rtMapping of roomTimeColumns) {
+                                const columnData = row[rtMapping.columnKey];
+                                console.log(`🚨 [csv] Checking column '${rtMapping.columnKey}' for ${rtMapping.room}:`, columnData);
                                 
-                                if (timeData && timeData.trim() !== '') {
-                                    timeValue = timeData;
-                                    timeColumnUsed = timeCol;
-                                    console.log(`🚨 [csv] ✅ Found time data in column '${timeCol}': "${timeValue}"`);
+                                // STRICT validation: must be string, not null/undefined, and not empty after trim
+                                if (columnData && 
+                                    typeof columnData === 'string' && 
+                                    columnData.trim() !== '') {
                                     
-                                    // If room name is not determined from 1:checkbox, infer from time column
-                                    if (!roomName) {
-                                        if (timeCol === '7:checkbox') roomName = '会議室(さくら)';
-                                        else if (timeCol === '8:checkbox') roomName = '相談室(スミレ・コスモス)';
-                                        else if (timeCol === '234:checkbox') roomName = 'テレワークルームA';
-                                        else if (timeCol === '235:checkbox') roomName = 'テレワークルームB';
-                                        console.log(`🚨 [csv] Inferred roomName from time column: "${roomName}"`);
-                                    }
+                                    foundTimeValue = columnData.trim();
+                                    foundRoomName = rtMapping.room;
+                                    timeColumnUsed = rtMapping.columnKey;
                                     
-                                    break; // Use first time data found
+                                    console.log(`🚨 [csv] ✅ FOUND valid time data in '${rtMapping.columnKey}':`, foundTimeValue);
+                                    console.log(`🚨 [csv] ✅ Room determined from time column: "${foundRoomName}"`);
+                                    
+                                    break; // Use first valid time data found
+                                } else {
+                                    console.log(`🚨 [csv] Column '${rtMapping.columnKey}' invalid or empty`);
                                 }
                             }
                             
-                            console.log(`🚨 [csv] Final determined timeValue (raw):`, timeValue);
-                            console.log(`🚨 [csv] Time column used:`, timeColumnUsed);
-                            
-                            // 🚨 STEP 3: Parse time data and create events
-                            if (timeValue && roomName) {
-                                console.log(`🚨 [csv] ✅ Both room and time data found, proceeding with event creation`);
-                                
-                                // Parse the semicolon-separated time values with robust error handling
-                                const timeSlots = parseRobustTimeValue(timeValue);
-                                console.log(`🚨 [csv] Parsed ${timeSlots.length} time slots:`, timeSlots);
-                                
-                                // Create events for each time slot
-                                timeSlots.forEach((timeSlot, slotIndex) => {
-                                    console.log(`🚨 [csv] Creating event ${slotIndex + 1} for ${roomName} with slot:`, timeSlot);
-                                    
-                                    const eventObj = createCompleteEvent(
-                                        eventId, 
-                                        roomName, 
-                                        eventTitle, 
-                                        dateStr, 
-                                        timeSlot, 
-                                        index, 
-                                        slotIndex
-                                    );
-                                    
-                                    if (eventObj) {
-                                        rowEvents.push(eventObj);
-                                        console.log(`🚨 [csv] ✅ Successfully created event ${slotIndex + 1} for ${roomName}:`, eventObj);
-                                    } else {
-                                        console.error(`🚨 [csv] ❌ Failed to create event for ${roomName}, slot ${slotIndex + 1}`);
-                                    }
-                                });
-                            } else {
-                                console.error(`🚨 [csv] ❌ Missing required data:`);
-                                console.error(`🚨 [csv] ❌   roomName: "${roomName}"`);
-                                console.error(`🚨 [csv] ❌   timeValue: "${timeValue}"`);
-                                console.error(`🚨 [csv] ❌   roomCheckboxValue: "${roomCheckboxValue}"`);
-                                console.error(`🚨 [csv] ❌   Available time columns:`, timeColumns.map(col => ({ 
-                                    column: col, 
-                                    value: row[col],
-                                    hasData: !!(row[col] && row[col].trim())
-                                })));
+                            // Override room name if '1:checkbox' has valid data (higher priority)
+                            if (roomName && roomName.trim() !== '') {
+                                console.log(`🚨 [csv] ✅ Using room name from 1:checkbox: "${roomName}" (overriding: "${foundRoomName}")`);
+                                foundRoomName = roomName;
                             }
+                            
+                            console.log(`🚨 [csv] FINAL EXTRACTION RESULTS:`);
+                            console.log(`🚨 [csv] ✅ foundRoomName: "${foundRoomName}"`);
+                            console.log(`🚨 [csv] ✅ foundTimeValue: "${foundTimeValue}"`);
+                            console.log(`🚨 [csv] ✅ timeColumnUsed: "${timeColumnUsed}"`);
+                            
+                            // 🚨 STEP 3: STRICT VALIDATION AND EVENT CREATION
+                            console.log(`🚨 [csv] ===== STRICT VALIDATION BEFORE EVENT CREATION =====`);
+                            
+                            // ABSOLUTE requirement check - both foundTimeValue and foundRoomName must be valid
+                            if (!foundTimeValue || typeof foundTimeValue !== 'string' || foundTimeValue.trim() === '') {
+                                console.error(`🚨 [csv] ❌ Row ${index + 1}: CRITICAL - foundTimeValue is invalid: "${foundTimeValue}"`);
+                                const errorObj = {
+                                    line: index + 2,
+                                    errors: [`必要な時間データが見つかりませんでした。Time: "${foundTimeValue}"`],
+                                    extractedData: { id: eventId, date: dateStr, name: userName, title: eventTitle },
+                                    roomColumnAnalysis: roomTimeColumns.map(rt => ({
+                                        room: rt.room,
+                                        column: rt.columnKey,
+                                        exists: rt.columnKey in row,
+                                        value: row[rt.columnKey],
+                                        hasData: !!(row[rt.columnKey] && row[rt.columnKey].trim())
+                                    })),
+                                    fullRowData: Object.fromEntries(Object.entries(row).filter(([key, value]) => value && value.trim() !== ''))
+                                };
+                                errors.push(errorObj);
+                                console.error(`🚨 [csv] ❌ Error object created:`, JSON.stringify(errorObj, null, 2));
+                                // Skip this row completely
+                                return;
+                            }
+                            
+                            if (!foundRoomName || typeof foundRoomName !== 'string' || foundRoomName.trim() === '') {
+                                console.error(`🚨 [csv] ❌ Row ${index + 1}: CRITICAL - foundRoomName is invalid: "${foundRoomName}"`);
+                                const errorObj = {
+                                    line: index + 2,
+                                    errors: [`必要な部屋名が見つかりませんでした。Room: "${foundRoomName}"`],
+                                    extractedData: { id: eventId, date: dateStr, name: userName, title: eventTitle },
+                                    roomColumnAnalysis: roomTimeColumns.map(rt => ({
+                                        room: rt.room,
+                                        column: rt.columnKey,
+                                        exists: rt.columnKey in row,
+                                        value: row[rt.columnKey],
+                                        hasData: !!(row[rt.columnKey] && row[rt.columnKey].trim())
+                                    })),
+                                    fullRowData: Object.fromEntries(Object.entries(row).filter(([key, value]) => value && value.trim() !== ''))
+                                };
+                                errors.push(errorObj);
+                                console.error(`🚨 [csv] ❌ Error object created:`, JSON.stringify(errorObj, null, 2));
+                                // Skip this row completely
+                                return;
+                            }
+                            
+                            console.log(`🚨 [csv] ✅ VALIDATION PASSED - Both room and time data are valid`);
+                            console.log(`🚨 [csv] ✅ Proceeding with time parsing for: "${foundTimeValue}"`);
+                            
+                            // Parse the semicolon-separated time values with bulletproof error handling
+                            const timeSlots = parseUltraSafeTimeValue(foundTimeValue);
+                            console.log(`🚨 [csv] Parsed ${timeSlots.length} time slots from "${foundTimeValue}":`, timeSlots);
+                            
+                            if (timeSlots.length === 0) {
+                                console.error(`🚨 [csv] ❌ Row ${index + 1}: No valid time slots parsed from "${foundTimeValue}"`);
+                                const errorObj = {
+                                    line: index + 2,
+                                    errors: [`時間データの解析に失敗しました。Raw time: "${foundTimeValue}"`],
+                                    extractedData: { id: eventId, date: dateStr, name: userName, title: eventTitle, room: foundRoomName },
+                                    timeParsingAttempt: {
+                                        rawTimeValue: foundTimeValue,
+                                        timeValueType: typeof foundTimeValue,
+                                        timeValueLength: foundTimeValue.length
+                                    },
+                                    fullRowData: Object.fromEntries(Object.entries(row).filter(([key, value]) => value && value.trim() !== ''))
+                                };
+                                errors.push(errorObj);
+                                console.error(`🚨 [csv] ❌ Error object created:`, JSON.stringify(errorObj, null, 2));
+                                return;
+                            }
+                            
+                            // Create events for each valid time slot
+                            timeSlots.forEach((timeSlot, slotIndex) => {
+                                console.log(`🚨 [csv] Creating event ${slotIndex + 1} for ${foundRoomName} with slot:`, timeSlot);
+                                
+                                const eventObj = createUltraSafeEvent(
+                                    eventId, 
+                                    foundRoomName, 
+                                    eventTitle, 
+                                    dateStr, 
+                                    timeSlot, 
+                                    index, 
+                                    slotIndex
+                                );
+                                
+                                if (eventObj) {
+                                    rowEvents.push(eventObj);
+                                    console.log(`🚨 [csv] ✅ Successfully created event ${slotIndex + 1} for ${foundRoomName}:`, eventObj);
+                                } else {
+                                    console.error(`🚨 [csv] ❌ Failed to create event for ${foundRoomName}, slot ${slotIndex + 1}`);
+                                }
+                            });
                             
                             console.log(`🚨 [csv] Row ${index + 1} TOTAL EVENTS CREATED: ${rowEvents.length}`);
                             
@@ -610,7 +681,170 @@
                             console.log(`🚨🚨🚨 [csv] ===== FINISHED PROCESSING ROW ${index + 1} =====`);
                         });
                         
-                        // 🚨 NEW UTILITY FUNCTIONS FOR ACTUAL CSV DATA PROCESSING
+                        // 🚨 BULLETPROOF UTILITY FUNCTIONS - ZERO ERROR TOLERANCE
+                        
+                        function parseUltraSafeTimeValue(timeValue) {
+                            console.log(`🚨 [parseUltraSafeTimeValue] === ENTRY POINT ===`);
+                            console.log(`🚨 [parseUltraSafeTimeValue] Input:`, timeValue, `(type: ${typeof timeValue})`);
+                            
+                            const parsedSlots = [];
+                            
+                            // ABSOLUTE input validation - prevent ALL undefined/null errors
+                            if (!timeValue || typeof timeValue !== 'string' || timeValue.trim() === '') {
+                                console.error(`🚨 [parseUltraSafeTimeValue] CRITICAL: Invalid input - returning empty array`);
+                                console.error(`🚨 [parseUltraSafeTimeValue] Input details: value="${timeValue}", type="${typeof timeValue}"`);
+                                return parsedSlots; // Return empty array safely
+                            }
+                            
+                            try {
+                                // Safe normalize and split operations
+                                const normalizedTimeRange = timeValue
+                                    .replace(/：/g, ':')      // Full-width colon to half-width
+                                    .replace(/〜/g, '～')      // Normalize wave dash
+                                    .replace(/−/g, '～')      // Em dash to wave dash
+                                    .replace(/-/g, '～')      // Hyphen to wave dash
+                                    .trim();
+                                
+                                console.log(`🚨 [parseUltraSafeTimeValue] Normalized: "${normalizedTimeRange}"`);
+                                
+                                // SAFE split operation with validation
+                                if (!normalizedTimeRange.includes(';')) {
+                                    // Single time range
+                                    const singleSlot = parseValidTimeSlot(normalizedTimeRange);
+                                    if (singleSlot) {
+                                        parsedSlots.push(singleSlot);
+                                        console.log(`🚨 [parseUltraSafeTimeValue] ✅ Single slot parsed:`, singleSlot);
+                                    }
+                                } else {
+                                    // Multiple time ranges
+                                    const timeRanges = normalizedTimeRange.split(';')
+                                        .map(t => t.trim())
+                                        .filter(t => t && t.length > 3); // Filter out incomplete times like "11"
+                                    
+                                    console.log(`🚨 [parseUltraSafeTimeValue] Split into ${timeRanges.length} ranges:`, timeRanges);
+                                    
+                                    timeRanges.forEach((range, idx) => {
+                                        console.log(`🚨 [parseUltraSafeTimeValue] Processing range ${idx + 1}: "${range}"`);
+                                        const slot = parseValidTimeSlot(range);
+                                        if (slot) {
+                                            parsedSlots.push(slot);
+                                            console.log(`🚨 [parseUltraSafeTimeValue] ✅ Valid slot ${idx + 1}:`, slot);
+                                        } else {
+                                            console.warn(`🚨 [parseUltraSafeTimeValue] ❌ Invalid slot ${idx + 1}: "${range}"`);
+                                        }
+                                    });
+                                }
+                                
+                            } catch (error) {
+                                console.error(`🚨 [parseUltraSafeTimeValue] EXCEPTION caught:`, error);
+                                console.error(`🚨 [parseUltraSafeTimeValue] Stack:`, error.stack);
+                                // Return empty array on any error
+                            }
+                            
+                            console.log(`🚨 [parseUltraSafeTimeValue] === RESULT: ${parsedSlots.length} valid slots ===`, parsedSlots);
+                            return parsedSlots;
+                        }
+                        
+                        function parseValidTimeSlot(timeRange) {
+                            if (!timeRange || typeof timeRange !== 'string') return null;
+                            
+                            const timeParts = timeRange.split('～');
+                            if (timeParts.length !== 2) return null;
+                            
+                            const startTime = timeParts[0].trim();
+                            const endTime = timeParts[1].trim();
+                            
+                            // Strict time format validation
+                            const timeRegex = /^\d{1,2}:\d{2}$/;
+                            if (timeRegex.test(startTime) && timeRegex.test(endTime)) {
+                                return { start: startTime, end: endTime };
+                            }
+                            
+                            return null;
+                        }
+                        
+                        function createUltraSafeEvent(id, room, title, dateStr, timeSlot, rowIndex, slotIndex) {
+                            console.log(`🚨 [createUltraSafeEvent] === ENTRY POINT ===`);
+                            console.log(`🚨 [createUltraSafeEvent] Inputs:`, { id, room, title, dateStr, timeSlot, rowIndex, slotIndex });
+                            
+                            try {
+                                // ABSOLUTE input validation
+                                if (!id || !room || !title || !dateStr || !timeSlot) {
+                                    console.error(`🚨 [createUltraSafeEvent] CRITICAL: Missing required inputs`);
+                                    return null;
+                                }
+                                
+                                if (!timeSlot.start || !timeSlot.end) {
+                                    console.error(`🚨 [createUltraSafeEvent] CRITICAL: Invalid timeSlot`, timeSlot);
+                                    return null;
+                                }
+                                
+                                // Ultra-safe date normalization
+                                const normalizedDate = ultraSafeDateNormalization(dateStr);
+                                if (!normalizedDate) {
+                                    console.error(`🚨 [createUltraSafeEvent] CRITICAL: Date normalization failed for "${dateStr}"`);
+                                    return null;
+                                }
+                                
+                                // Create ISO datetime strings
+                                const startDateTime = `${normalizedDate}T${timeSlot.start}:00`;
+                                const endDateTime = `${normalizedDate}T${timeSlot.end}:00`;
+                                
+                                console.log(`🚨 [createUltraSafeEvent] DateTime strings: "${startDateTime}" to "${endDateTime}"`);
+                                
+                                // Validate dates
+                                const startDate = new Date(startDateTime);
+                                const endDate = new Date(endDateTime);
+                                
+                                if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+                                    console.error(`🚨 [createUltraSafeEvent] CRITICAL: Invalid dates created`);
+                                    return null;
+                                }
+                                
+                                // Create unique event ID
+                                const uniqueId = `${id}_${room.replace(/[()]/g, '')}_${rowIndex}_${slotIndex}`;
+                                
+                                const eventObj = {
+                                    id: uniqueId,
+                                    room: room,
+                                    name: title,
+                                    start: startDate.toISOString(),
+                                    end: endDate.toISOString()
+                                };
+                                
+                                console.log(`🚨 [createUltraSafeEvent] ✅ SUCCESS:`, eventObj);
+                                return eventObj;
+                                
+                            } catch (error) {
+                                console.error(`🚨 [createUltraSafeEvent] EXCEPTION:`, error);
+                                console.error(`🚨 [createUltraSafeEvent] Stack:`, error.stack);
+                                return null;
+                            }
+                        }
+                        
+                        function ultraSafeDateNormalization(dateString) {
+                            if (!dateString || typeof dateString !== 'string' || dateString.trim() === '') {
+                                console.error(`🚨 [ultraSafeDateNormalization] Invalid input: "${dateString}"`);
+                                return null;
+                            }
+                            
+                            try {
+                                const parts = dateString.trim().split('/');
+                                if (parts.length === 3) {
+                                    const year = parts[0];
+                                    const month = String(parseInt(parts[1], 10)).padStart(2, '0');
+                                    const day = String(parseInt(parts[2], 10)).padStart(2, '0');
+                                    const result = `${year}-${month}-${day}`;
+                                    console.log(`🚨 [ultraSafeDateNormalization] "${dateString}" -> "${result}"`);
+                                    return result;
+                                }
+                            } catch (error) {
+                                console.error(`🚨 [ultraSafeDateNormalization] Exception:`, error);
+                            }
+                            
+                            console.error(`🚨 [ultraSafeDateNormalization] Failed to normalize: "${dateString}"`);
+                            return null;
+                        }
                         
                         function parseRobustTimeValue(timeValue) {
                             if (!timeValue) return [];
