@@ -1,0 +1,2077 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>施設予約カレンダー</title>
+    
+    <!-- CACHE CONTROL -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            background: #f8f9fa;
+            color: #333;
+        }
+        
+        .header {
+            background: white;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .header h1 {
+            margin: 0 0 15px 0;
+            color: #333;
+            font-size: 24px;
+        }
+        
+        .header-controls {
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .csv-upload {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .csv-upload input[type="file"] {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        
+        .btn {
+            padding: 10px 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+        
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #0056b3;
+        }
+        
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #1e7e34;
+        }
+        
+        .btn-info {
+            background: #17a2b8;
+            color: white;
+        }
+        
+        .btn-info:hover {
+            background: #138496;
+        }
+        
+        .btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .status-badge {
+            padding: 8px 12px;
+            border-radius: 5px;
+            font-size: 14px;
+            font-weight: 500;
+            display: none;
+        }
+        
+        .status-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .calendar-navigation {
+            background: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            border-radius: 8px;
+        }
+        
+        .nav-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .nav-btn {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 8px 12px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .nav-btn:hover {
+            background: #e9ecef;
+        }
+        
+        .week-info {
+            font-size: 18px;
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .calendar-container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: hidden;
+            margin: 0 20px;
+        }
+        
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: 150px repeat(7, 1fr);
+            min-height: 600px;
+        }
+        
+        .room-header, .day-header {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 12px 8px;
+            font-weight: 600;
+            font-size: 13px;
+            text-align: center;
+            color: #495057;
+        }
+        
+        .room-header {
+            background: #e9ecef;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            writing-mode: horizontal-tb;
+            text-align: center;
+        }
+        
+        .day-header {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        
+        .day-name {
+            font-size: 12px;
+            color: #6c757d;
+        }
+        
+        .day-date {
+            font-size: 16px;
+            color: #333;
+        }
+        
+        .today .day-date {
+            color: #007bff;
+            font-weight: 700;
+        }
+        
+        .calendar-cell {
+            border: 1px solid #dee2e6;
+            min-height: 120px;
+            position: relative;
+            padding: 4px;
+            background: white;
+        }
+        
+        .room-cell {
+            background: #f8f9fa;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            color: #495057;
+            writing-mode: horizontal-tb;
+            text-align: center;
+            padding: 8px 4px;
+        }
+        
+        .event-item {
+            background: #007bff;
+            color: white;
+            padding: 3px 6px;
+            margin: 2px 0;
+            border-radius: 3px;
+            font-size: 11px;
+            line-height: 1.2;
+            cursor: pointer;
+            word-wrap: break-word;
+            overflow: hidden;
+        }
+        
+        .event-time {
+            font-size: 10px;
+            opacity: 0.9;
+            margin-bottom: 1px;
+        }
+        
+        .event-title {
+            font-weight: 500;
+        }
+        
+        .room-sakura .event-item { background: #ff69b4; }
+        .room-violet .event-item { background: #9370db; }
+        .room-telework-a .event-item { background: #87ceeb; }
+        .room-telework-b .event-item { background: #90ee90; color: #333; }
+        
+        .loading, .no-events {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            font-size: 16px;
+        }
+        
+        .admin-panel {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 0 20px 20px 20px;
+            display: none;
+        }
+        
+        .admin-panel h3 {
+            margin-top: 0;
+            color: #495057;
+        }
+        
+        .events-list {
+            max-height: 300px;
+            overflow-y: auto;
+            margin-bottom: 10px;
+        }
+        
+        #statusMessage {
+            margin: 10px 20px;
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+        }
+        
+        @media (max-width: 768px) {
+            .calendar-grid {
+                grid-template-columns: 100px repeat(7, 1fr);
+            }
+            
+            .room-header, .day-header {
+                padding: 8px 4px;
+                font-size: 12px;
+            }
+            
+            .calendar-cell {
+                min-height: 80px;
+                padding: 2px;
+            }
+            
+            .event-item {
+                font-size: 10px;
+                padding: 2px 4px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>施設予約カレンダー</h1>
+        
+        <div class="header-controls">
+            <div class="csv-upload">
+                <input type="file" id="csvFileInput" accept=".csv" />
+                <button id="csvUploadBtn" class="btn btn-info">📄 CSV 取り込み</button>
+            </div>
+            <button id="adminToggle" class="btn btn-success">🔧 管理モード</button>
+            <div id="statusBadge" class="status-badge"></div>
+        </div>
+    </div>
+    
+    <div id="adminPanel" class="admin-panel">
+        <h3>📋 イベント管理</h3>
+        <div id="eventsList" class="events-list">
+            <p>読み込み中...</p>
+        </div>
+        <button id="refreshBtn" class="btn btn-primary">🔄 更新</button>
+    </div>
+    
+    <div id="statusMessage"></div>
+    
+    <div class="calendar-navigation">
+        <div class="nav-controls">
+            <button id="prevWeekBtn" class="nav-btn">‹ 前週</button>
+            <button id="todayBtn" class="nav-btn">今日</button>
+            <button id="nextWeekBtn" class="nav-btn">次週 ›</button>
+        </div>
+        <div class="week-info" id="weekInfo">2025年7月28日 - 8月3日</div>
+    </div>
+    
+    <div class="calendar-container">
+        <div id="loading" class="loading">読み込み中...</div>
+        <div id="noEvents" class="no-events" style="display: none;">予約がありません</div>
+        <div id="calendar" class="calendar-grid" style="display: none;"></div>
+    </div>
+
+    <!-- External libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/encoding-japanese@1.0.30/encoding.min.js"></script>
+    
+    <script>
+        // Grid Calendar Implementation
+        const ROOMS = ['会議室(さくら)', '相談室(スミレ・コスモス)', 'テレワークルームA', 'テレワークルームB'];
+        const ROOM_COLORS = {
+            '会議室(さくら)': 'room-sakura',
+            '相談室(スミレ・コスモス)': 'room-violet', 
+            'テレワークルームA': 'room-telework-a',
+            'テレワークルームB': 'room-telework-b'
+        };
+        
+        let currentWeekStart = new Date();
+        let currentEvents = [];
+        let adminMode = false;
+    </script>
+    
+    <script>
+        // Grid Calendar Functions
+        
+        // Get Monday of current week
+        function getWeekStart(date = new Date()) {
+            const d = new Date(date);
+            const day = d.getDay();
+            const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+            return new Date(d.setDate(diff));
+        }
+        
+        // Format date for display
+        function formatDate(date) {
+            return date.toLocaleDateString('ja-JP', {
+                month: 'numeric',
+                day: 'numeric'
+            });
+        }
+        
+        // Format week range
+        function formatWeekRange(start) {
+            const end = new Date(start);
+            end.setDate(start.getDate() + 6);
+            
+            return `${start.getFullYear()}年${start.getMonth() + 1}月${start.getDate()}日 - ${end.getMonth() + 1}月${end.getDate()}日`;
+        }
+        
+        // Get day name in Japanese
+        function getDayName(dayIndex) {
+            const days = ['日', '月', '火', '水', '木', '金', '土'];
+            return days[dayIndex];
+        }
+        
+        // Initialize current week to Monday of this week
+        currentWeekStart = getWeekStart();
+        
+        // Render calendar grid
+        function renderCalendar() {
+            const calendar = document.getElementById('calendar');
+            const weekInfo = document.getElementById('weekInfo');
+            
+            // Update week info
+            weekInfo.textContent = formatWeekRange(currentWeekStart);
+            
+            // Clear calendar
+            calendar.innerHTML = '';
+            
+            // Create header row
+            const headerRow = document.createElement('div');
+            headerRow.style.display = 'contents';
+            
+            // Empty top-left cell
+            const emptyCell = document.createElement('div');
+            emptyCell.className = 'room-header';
+            emptyCell.textContent = '部屋';
+            headerRow.appendChild(emptyCell);
+            
+            // Day headers
+            for (let i = 0; i < 7; i++) {
+                const date = new Date(currentWeekStart);
+                date.setDate(currentWeekStart.getDate() + i);
+                
+                const dayHeader = document.createElement('div');
+                dayHeader.className = 'day-header';
+                if (isToday(date)) dayHeader.classList.add('today');
+                
+                const dayName = document.createElement('div');
+                dayName.className = 'day-name';
+                dayName.textContent = getDayName(date.getDay());
+                
+                const dayDate = document.createElement('div');
+                dayDate.className = 'day-date';
+                dayDate.textContent = formatDate(date);
+                
+                dayHeader.appendChild(dayName);
+                dayHeader.appendChild(dayDate);
+                headerRow.appendChild(dayHeader);
+            }
+            
+            calendar.appendChild(headerRow);
+            
+            // Create room rows
+            ROOMS.forEach(room => {
+                const roomRow = document.createElement('div');
+                roomRow.style.display = 'contents';
+                
+                // Room name cell
+                const roomCell = document.createElement('div');
+                roomCell.className = 'room-cell';
+                roomCell.textContent = room;
+                roomRow.appendChild(roomCell);
+                
+                // Day cells for this room
+                for (let i = 0; i < 7; i++) {
+                    const date = new Date(currentWeekStart);
+                    date.setDate(currentWeekStart.getDate() + i);
+                    
+                    const dayCell = document.createElement('div');
+                    dayCell.className = `calendar-cell ${ROOM_COLORS[room]}`;
+                    
+                    // Add events for this room and date
+                    const dayEvents = getEventsForRoomAndDate(room, date);
+                    dayEvents.forEach(event => {
+                        const eventEl = document.createElement('div');
+                        eventEl.className = 'event-item';
+                        
+                        const timeEl = document.createElement('div');
+                        timeEl.className = 'event-time';
+                        timeEl.textContent = formatEventTime(event);
+                        
+                        const titleEl = document.createElement('div');
+                        titleEl.className = 'event-title';
+                        titleEl.textContent = event.name;
+                        
+                        eventEl.appendChild(timeEl);
+                        eventEl.appendChild(titleEl);
+                        dayCell.appendChild(eventEl);
+                    });
+                    
+                    roomRow.appendChild(dayCell);
+                }
+                
+                calendar.appendChild(roomRow);
+            });
+        }
+        
+        // Check if date is today
+        function isToday(date) {
+            const today = new Date();
+            return date.toDateString() === today.toDateString();
+        }
+        
+        // Get events for specific room and date
+        function getEventsForRoomAndDate(room, date) {
+            return currentEvents.filter(event => {
+                const eventDate = new Date(event.start);
+                return event.room === room && 
+                       eventDate.toDateString() === date.toDateString();
+            }).sort((a, b) => new Date(a.start) - new Date(b.start));
+        }
+        
+        // Format event time
+        function formatEventTime(event) {
+            const start = new Date(event.start);
+            const end = new Date(event.end);
+            return `${formatTime(start)}-${formatTime(end)}`;
+        }
+        
+        // Format time as HH:MM
+        function formatTime(date) {
+            return date.toLocaleTimeString('ja-JP', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+        }
+        
+        // Navigation functions
+        function goToPreviousWeek() {
+            currentWeekStart.setDate(currentWeekStart.getDate() - 7);
+            renderCalendar();
+        }
+        
+        function goToNextWeek() {
+            currentWeekStart.setDate(currentWeekStart.getDate() + 7);
+            renderCalendar();
+        }
+        
+        function goToToday() {
+            currentWeekStart = getWeekStart();
+            renderCalendar();
+        }
+        
+        // CSV Upload function
+        window.uploadCSV = async function() {
+            const fileInput = document.getElementById('csvFileInput');
+            const uploadBtn = document.getElementById('csvUploadBtn');
+            const file = fileInput ? fileInput.files[0] : null;
+            
+            if (!file) {
+                alert('CSVファイルを選択してください');
+                return;
+            }
+            
+            if (uploadBtn) {
+                uploadBtn.disabled = true;
+                uploadBtn.textContent = '読み込み中...';
+            }
+            
+            try {
+                console.log('🚨 [csv] Reading file:', file.name, 'Size:', file.size);
+                
+                // Read file as array buffer
+                const arrayBuffer = await file.arrayBuffer();
+                const uint8Array = new Uint8Array(arrayBuffer);
+                
+                // Detect encoding and convert to UTF-8
+                let text;
+                if (typeof Encoding !== 'undefined') {
+                    const detectedEncoding = Encoding.detect(uint8Array);
+                    console.log('🚨 [csv] Detected encoding:', detectedEncoding);
+                    
+                    if (detectedEncoding === 'SJIS' || detectedEncoding === 'EUCJP') {
+                        const unicodeArray = Encoding.convert(uint8Array, {
+                            to: 'UNICODE',
+                            from: detectedEncoding
+                        });
+                        text = Encoding.codeToString(unicodeArray);
+                    } else {
+                        text = new TextDecoder('utf-8').decode(arrayBuffer);
+                    }
+                } else {
+                    console.warn('🚨 [csv] Encoding library not available, using UTF-8');
+                    text = new TextDecoder('utf-8').decode(arrayBuffer);
+                }
+                
+                console.log('🚨 [csv] CSV text length:', text.length);
+                console.log('🚨 [csv] CSV first 200 chars:', text.substring(0, 200));
+                
+                // Parse CSV using PapaParse
+                if (typeof Papa === 'undefined') {
+                    console.error('🚨 [csv] PapaParse library not available');
+                    showStatusBadge('PapaParseライブラリが読み込まれていません', 'error');
+                    return;
+                }
+                
+                Papa.parse(text, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: async function(results) {
+                        console.log('🚨 [csv] ✅ CSV parsed successfully');
+                        console.log('🚨 [csv] Raw parsed CSV data:', results.data);
+                        console.log('🚨 [csv] Number of rows:', results.data.length);
+                        
+                        let parsedCsvData = results.data;
+                        const errors = []; // エラーを記録する配列
+
+                        // === 最終修正ロジック：最初のデータ行がヘッダーまたは説明行の場合にスキップ ===
+                        if (parsedCsvData.length > 0) {
+                            const firstActualRow = parsedCsvData[0]; // results.data[0]はCSVの2行目にあたる
+
+                            // 重要な列のデータが「予約したい日付を選択してください。」のような説明文であるかチェック
+                            const isInstructionRow = (
+                                firstActualRow['5:date'] === "予約したい日付を選択してください。" ||
+                                firstActualRow['7:checkbox'] === "会議室(さくら)の予約したい時間を選択してください。 [※仕様上30分単位の選択項目ですが、必ず連続した1時間単位で予約してください。]" ||
+                                firstActualRow['8:checkbox'] === "相談室(スミレ・コスモス)の予約したい時間を選択してください。 [※仕様上30分単位の選択項目ですが、必ず連続した1時間単位で予約してください。]" ||
+                                firstActualRow['234:checkbox'] === "テレワークルームAの予約したい時間を選択してください。 [※仕様上30分単位の選択項目ですが、必ず連続した1時間単位で予約してください。]" ||
+                                firstActualRow['235:checkbox'] === "テレワークルームBの予約したい時間を選択してください。 [※仕様上30分単位の選択項目ですが、必ず連続した1時間単位で予約してください。]"
+                            );
+
+                            if (isInstructionRow) {
+                                console.warn('⚠️ [csv] Detected an instruction/template row at the beginning (CSV line 2). Skipping this row.');
+                                parsedCsvData.shift(); // 最初の要素を削除してスキップ
+                            }
+                        }
+                        // === スキップロジックここまで ===
+
+                        console.log('🚨 [csv] Processed CSV data after initial skip (if any):', parsedCsvData);
+                        console.log('🚨 [csv] Number of rows to process:', parsedCsvData.length);
+                        
+                        if (results.errors && results.errors.length > 0) {
+                            console.warn('🚨 [csv] Parse warnings:', results.errors);
+                        }
+                        
+                        // Validate and convert CSV data
+                        const validEvents = [];
+                        
+                        // 連続時間帯を集約するためのヘルパー関数
+                        function consolidateConsecutiveTimeSlots(timeSlots) {
+                            if (!timeSlots || timeSlots.length === 0) return [];
+                            if (timeSlots.length === 1) return timeSlots;
+                            
+                            console.log(`🚨 [consolidate] Input slots:`, timeSlots);
+                            
+                            // 時間順にソート
+                            const sortedSlots = [...timeSlots].sort((a, b) => {
+                                const timeA = a.start.split(':').map(n => parseInt(n));
+                                const timeB = b.start.split(':').map(n => parseInt(n));
+                                return (timeA[0] * 60 + timeA[1]) - (timeB[0] * 60 + timeB[1]);
+                            });
+                            
+                            const consolidated = [];
+                            let currentSlot = { ...sortedSlots[0] };
+                            
+                            for (let i = 1; i < sortedSlots.length; i++) {
+                                const nextSlot = sortedSlots[i];
+                                
+                                // 現在のスロットの終了時間と次のスロットの開始時間が連続しているかチェック
+                                if (currentSlot.end === nextSlot.start) {
+                                    // 連続している場合、終了時間を延長
+                                    currentSlot.end = nextSlot.end;
+                                    console.log(`🚨 [consolidate] Merged slots: ${currentSlot.start}〜${currentSlot.end}`);
+                                } else {
+                                    // 連続していない場合、現在のスロットを結果に追加し、新しいスロットを開始
+                                    consolidated.push(currentSlot);
+                                    currentSlot = { ...nextSlot };
+                                }
+                            }
+                            
+                            // 最後のスロットを追加
+                            consolidated.push(currentSlot);
+                            
+                            console.log(`🚨 [consolidate] Output slots:`, consolidated);
+                            return consolidated;
+                        }
+                        
+                        // 🚨 COMPREHENSIVE CSV HEADER ANALYSIS AND DEBUGGING
+                        console.log('🚨🚨🚨 [csv] ===== STARTING CSV PROCESSING ANALYSIS =====');
+                        console.log('🚨 [csv] Total rows found:', results.data.length);
+                        
+                        if (results.data.length > 0) {
+                            const allHeaders = Object.keys(results.data[0]);
+                            console.log('🚨 [csv] ALL CSV HEADERS DETECTED:');
+                            allHeaders.forEach((header, idx) => {
+                                console.log(`🚨 [csv] Header ${idx + 1}: "${header}"`);
+                            });
+                            
+                            // Identify room-related columns
+                            const roomColumns = allHeaders.filter(header => 
+                                header.includes('会議室') || header.includes('相談室') || 
+                                header.includes('テレワーク') || header.includes('時間')
+                            );
+                            console.log('🚨 [csv] ROOM-RELATED COLUMNS FOUND:', roomColumns);
+                            
+                            // Show sample data from first row
+                            console.log('🚨 [csv] SAMPLE DATA FROM FIRST ROW:');
+                            console.log('🚨 [csv] - 5:date value:', results.data[0]['5:date']);
+                            console.log('🚨 [csv] - 244:lastname value:', results.data[0]['244:lastname']);
+                            console.log('🚨 [csv] - 244:firstname value:', results.data[0]['244:firstname']);
+                            console.log('🚨 [csv] - 使用目的 column exists:', allHeaders.includes('使用目的と活動内容を入力してください。'));
+                            console.log('🚨 [csv] - 回答番号 value:', results.data[0]['回答番号']);
+                        }
+                        
+                        parsedCsvData.forEach((row, index) => {
+                            console.log(`🚨🚨🚨 [csv] ===== PROCESSING ROW ${index + 1} =====`);
+                            console.log(`🚨 [csv] --- Processing new row ---`);
+                            console.log(`🚨 [csv] Raw row data (full object):`, row);
+                            console.log(`🚨 [csv] Keys available in this row:`, Object.keys(row));
+                            console.log(`🚨 [csv] Row ${index + 1} has ${Object.keys(row).length} columns`);
+                            
+                            // 🚨 CRITICAL: Log first 20 keys to identify exact header names
+                            const rowKeys = Object.keys(row);
+                            console.log(`🚨 [csv] First 20 keys in row ${index + 1}:`);
+                            rowKeys.slice(0, 20).forEach((key, idx) => {
+                                console.log(`🚨 [csv]   Key ${idx + 1}: "${key}" = "${row[key]}"`);
+                            });
+                            
+                            // 1. ID EXTRACTION with detailed logging
+                            const eventId = row['回答番号'] || `csv_${Date.now()}_${index}`;
+                            console.log(`🚨 [csv] Extracted ID: "${eventId}"`);
+                            console.log(`🚨 [csv] ID extraction - 回答番号 exists:`, '回答番号' in row);
+                            console.log(`🚨 [csv] ID extraction - 回答番号 value:`, row['回答番号']);
+                            
+                            // 2. DATE EXTRACTION with detailed logging  
+                            const dateStr = row['5:date'];
+                            console.log(`🚨 [csv] Extracted Date String: "${dateStr}"`);
+                            console.log(`🚨 [csv] Date extraction - 5:date exists:`, '5:date' in row);
+                            console.log(`🚨 [csv] Date extraction - 5:date value:`, row['5:date']);
+                            
+                            // 3. NAME EXTRACTION with detailed logging
+                            let userName = '';
+                            console.log(`🚨 [csv] Name extraction - checking fields:`);
+                            console.log(`🚨 [csv]   244:lastname exists:`, '244:lastname' in row, 'value:', row['244:lastname']);
+                            console.log(`🚨 [csv]   244:firstname exists:`, '244:firstname' in row, 'value:', row['244:firstname']);
+                            console.log(`🚨 [csv]   91:lastname exists:`, '91:lastname' in row, 'value:', row['91:lastname']);
+                            console.log(`🚨 [csv]   91:firstname exists:`, '91:firstname' in row, 'value:', row['91:firstname']);
+                            
+                            if (row['244:lastname'] && row['244:firstname']) {
+                                // 名 + 姓の順で表示（例: 太郎 山田）
+                                userName = `${row['244:firstname']} ${row['244:lastname']}`;
+                                console.log(`🚨 [csv] ✅ Extracted Name from 244 fields: "${userName}"`);
+                            } else if (row['91:lastname'] && row['91:firstname']) {
+                                // 名 + 姓の順で表示（例: 太郎 山田）
+                                userName = `${row['91:firstname']} ${row['91:lastname']}`;
+                                console.log(`🚨 [csv] ✅ Extracted Name from 91 fields: "${userName}"`);
+                            } else {
+                                userName = row['92:text'] || row['93:text'] || '予約者';
+                                console.log(`🚨 [csv] ✅ Extracted Name from fallback: "${userName}"`);
+                            }
+                            
+                            // 4. PURPOSE/TITLE EXTRACTION with detailed logging
+                            const purposeColumn = '使用目的と活動内容を入力してください。';
+                            console.log(`🚨 [csv] Title extraction - purpose column exists:`, purposeColumn in row);
+                            console.log(`🚨 [csv] Title extraction - purpose column value:`, row[purposeColumn]);
+                            
+                            let eventTitle = row[purposeColumn] || userName || `予約 ${eventId}`;
+                            console.log(`🚨 [csv] Extracted Title/Purpose: "${eventTitle}"`);
+                            
+                            if (!dateStr) {
+                                console.error(`🚨 [csv] ❌ Row ${index + 1}: NO DATE FOUND - Skipping row`);
+                                const errorObj = {
+                                    line: index + 2,
+                                    errors: ['5:date列が見つからないか空です'],
+                                    data: {
+                                        availableKeys: rowKeys.slice(0, 10),
+                                        dateFieldValue: row['5:date']
+                                    }
+                                };
+                                errors.push(errorObj);
+                                return;
+                            }
+                            
+                            // 5. CORRECTED ROOM AND TIME DETECTION USING ACTUAL CSV KEYS
+                            console.log(`🚨 [csv] ===== ROOM TIME DETECTION FOR ROW ${index + 1} (USING REAL CSV KEYS) =====`);
+                            console.log(`🚨 [csv] Row data with values (first 30):`, Object.fromEntries(Object.entries(row).slice(0, 30)));
+                            
+                            let rowEvents = [];
+                            
+                            // 🚨 STEP 1: Extract room name from '1:checkbox' column
+                            let roomName = '';
+                            const roomCheckboxValue = row['1:checkbox'];
+                            console.log(`🚨 [csv] Extracted room checkbox value (1:checkbox):`, roomCheckboxValue);
+                            
+                            if (roomCheckboxValue) {
+                                // Remove text in brackets like "【1時間100円】"
+                                if (roomCheckboxValue.includes('【')) {
+                                    roomName = roomCheckboxValue.split('【')[0].trim();
+                                } else {
+                                    roomName = roomCheckboxValue.trim();
+                                }
+                                
+                                // Normalize room names
+                                if (roomName.includes('会議室') && roomName.includes('さくら')) {
+                                    roomName = '会議室(さくら)';
+                                } else if (roomName.includes('相談室') && (roomName.includes('スミレ') || roomName.includes('コスモス'))) {
+                                    roomName = '相談室(スミレ・コスモス)';
+                                } else if (roomName.includes('テレワークルームA')) {
+                                    roomName = 'テレワークルームA';
+                                } else if (roomName.includes('テレワークルームB')) {
+                                    roomName = 'テレワークルームB';
+                                }
+                                
+                                console.log(`🚨 [csv] Final determined roomName:`, roomName);
+                            }
+                            
+                            // 🚨 STEP 2: BULLETPROOF TIME DATA EXTRACTION
+                            console.log(`🚨 [csv] ===== BULLETPROOF TIME DATA EXTRACTION =====`);
+                            
+                            // Define room-time column mappings
+                            const roomTimeColumns = [
+                                { room: '会議室(さくら)', columnKey: '7:checkbox' },
+                                { room: '相談室(スミレ・コスモス)', columnKey: '8:checkbox' },
+                                { room: 'テレワークルームA', columnKey: '234:checkbox' },
+                                { room: 'テレワークルームB', columnKey: '235:checkbox' }
+                            ];
+                            
+                            let foundRoomName = '';
+                            let foundTimeValue = '';
+                            let timeColumnUsed = '';
+                            
+                            console.log(`🚨 [csv] Checking all room-time columns for valid data...`);
+                            
+                            // Check each room-time column for data
+                            for (const rtMapping of roomTimeColumns) {
+                                const columnData = row[rtMapping.columnKey];
+                                console.log(`🚨 [csv] Checking column '${rtMapping.columnKey}' for ${rtMapping.room}:`, columnData);
+                                
+                                // STRICT validation: must be string, not null/undefined, and not empty after trim
+                                if (columnData && 
+                                    typeof columnData === 'string' && 
+                                    columnData.trim() !== '') {
+                                    
+                                    foundTimeValue = columnData.trim();
+                                    foundRoomName = rtMapping.room;
+                                    timeColumnUsed = rtMapping.columnKey;
+                                    
+                                    console.log(`🚨 [csv] ✅ FOUND valid time data in '${rtMapping.columnKey}':`, foundTimeValue);
+                                    console.log(`🚨 [csv] ✅ Room determined from time column: "${foundRoomName}"`);
+                                    
+                                    break; // Use first valid time data found
+                                } else {
+                                    console.log(`🚨 [csv] Column '${rtMapping.columnKey}' invalid or empty`);
+                                }
+                            }
+                            
+                            // Override room name if '1:checkbox' has valid data (higher priority)
+                            if (roomName && roomName.trim() !== '') {
+                                console.log(`🚨 [csv] ✅ Using room name from 1:checkbox: "${roomName}" (overriding: "${foundRoomName}")`);
+                                foundRoomName = roomName;
+                            }
+                            
+                            console.log(`🚨 [csv] FINAL EXTRACTION RESULTS:`);
+                            console.log(`🚨 [csv] ✅ foundRoomName: "${foundRoomName}"`);
+                            console.log(`🚨 [csv] ✅ foundTimeValue: "${foundTimeValue}"`);
+                            console.log(`🚨 [csv] ✅ timeColumnUsed: "${timeColumnUsed}"`);
+                            
+                            // 🚨 STEP 3: STRICT VALIDATION AND EVENT CREATION
+                            console.log(`🚨 [csv] ===== STRICT VALIDATION BEFORE EVENT CREATION =====`);
+                            
+                            // ABSOLUTE requirement check - both foundTimeValue and foundRoomName must be valid
+                            if (!foundTimeValue || typeof foundTimeValue !== 'string' || foundTimeValue.trim() === '') {
+                                console.error(`🚨 [csv] ❌ Row ${index + 1}: CRITICAL - foundTimeValue is invalid: "${foundTimeValue}"`);
+                                const errorObj = {
+                                    line: index + 2,
+                                    errors: [`必要な時間データが見つかりませんでした。Time: "${foundTimeValue}"`],
+                                    extractedData: { id: eventId, date: dateStr, name: userName, title: eventTitle },
+                                    roomColumnAnalysis: roomTimeColumns.map(rt => ({
+                                        room: rt.room,
+                                        column: rt.columnKey,
+                                        exists: rt.columnKey in row,
+                                        value: row[rt.columnKey],
+                                        hasData: !!(row[rt.columnKey] && row[rt.columnKey].trim())
+                                    })),
+                                    fullRowData: Object.fromEntries(Object.entries(row).filter(([key, value]) => value && value.trim() !== ''))
+                                };
+                                errors.push(errorObj);
+                                console.error(`🚨 [csv] ❌ Error object created:`, JSON.stringify(errorObj, null, 2));
+                                // Skip this row completely
+                                return;
+                            }
+                            
+                            if (!foundRoomName || typeof foundRoomName !== 'string' || foundRoomName.trim() === '') {
+                                console.error(`🚨 [csv] ❌ Row ${index + 1}: CRITICAL - foundRoomName is invalid: "${foundRoomName}"`);
+                                const errorObj = {
+                                    line: index + 2,
+                                    errors: [`必要な部屋名が見つかりませんでした。Room: "${foundRoomName}"`],
+                                    extractedData: { id: eventId, date: dateStr, name: userName, title: eventTitle },
+                                    roomColumnAnalysis: roomTimeColumns.map(rt => ({
+                                        room: rt.room,
+                                        column: rt.columnKey,
+                                        exists: rt.columnKey in row,
+                                        value: row[rt.columnKey],
+                                        hasData: !!(row[rt.columnKey] && row[rt.columnKey].trim())
+                                    })),
+                                    fullRowData: Object.fromEntries(Object.entries(row).filter(([key, value]) => value && value.trim() !== ''))
+                                };
+                                errors.push(errorObj);
+                                console.error(`🚨 [csv] ❌ Error object created:`, JSON.stringify(errorObj, null, 2));
+                                // Skip this row completely
+                                return;
+                            }
+                            
+                            console.log(`🚨 [csv] ✅ VALIDATION PASSED - Both room and time data are valid`);
+                            console.log(`🚨 [csv] ✅ Proceeding with time parsing for: "${foundTimeValue}"`);
+                            
+                            // Parse the semicolon-separated time values with bulletproof error handling
+                            const rawTimeSlots = parseUltraSafeTimeValue(foundTimeValue);
+                            console.log(`🚨 [csv] Parsed ${rawTimeSlots.length} raw time slots from "${foundTimeValue}":`, rawTimeSlots);
+                            
+                            // 連続する時間帯を集約
+                            const timeSlots = consolidateConsecutiveTimeSlots(rawTimeSlots);
+                            console.log(`🚨 [csv] Consolidated to ${timeSlots.length} time slots:`, timeSlots);
+                            
+                            if (timeSlots.length === 0) {
+                                console.error(`🚨 [csv] ❌ Row ${index + 1}: No valid time slots parsed from "${foundTimeValue}"`);
+                                const errorObj = {
+                                    line: index + 2,
+                                    errors: [`時間データの解析に失敗しました。Raw time: "${foundTimeValue}"`],
+                                    extractedData: { id: eventId, date: dateStr, name: userName, title: eventTitle, room: foundRoomName },
+                                    timeParsingAttempt: {
+                                        rawTimeValue: foundTimeValue,
+                                        timeValueType: typeof foundTimeValue,
+                                        timeValueLength: foundTimeValue.length
+                                    },
+                                    fullRowData: Object.fromEntries(Object.entries(row).filter(([key, value]) => value && value.trim() !== ''))
+                                };
+                                errors.push(errorObj);
+                                console.error(`🚨 [csv] ❌ Error object created:`, JSON.stringify(errorObj, null, 2));
+                                return;
+                            }
+                            
+                            // Create events for each valid time slot
+                            timeSlots.forEach((timeSlot, slotIndex) => {
+                                console.log(`🚨 [csv] Creating event ${slotIndex + 1} for ${foundRoomName} with slot:`, timeSlot);
+                                
+                                const eventObj = createUltraSafeEvent(
+                                    eventId, 
+                                    foundRoomName, 
+                                    eventTitle, 
+                                    dateStr, 
+                                    timeSlot, 
+                                    index, 
+                                    slotIndex
+                                );
+                                
+                                if (eventObj) {
+                                    rowEvents.push(eventObj);
+                                    console.log(`🚨 [csv] ✅ Successfully created event ${slotIndex + 1} for ${foundRoomName}:`, eventObj);
+                                } else {
+                                    console.error(`🚨 [csv] ❌ Failed to create event for ${foundRoomName}, slot ${slotIndex + 1}`);
+                                }
+                            });
+                            
+                            console.log(`🚨 [csv] Row ${index + 1} TOTAL EVENTS CREATED: ${rowEvents.length}`);
+                            
+                            // Add all events from this row to the main validEvents array
+                            rowEvents.forEach(event => {
+                                if (event) {
+                                    validEvents.push(event);
+                                    console.log(`🚨 [csv] ✅ Added event to validEvents array:`, event);
+                                }
+                            });
+                            
+                            // 6. DETAILED ERROR ANALYSIS AND REPORTING
+                            if (rowEvents.length === 0) {
+                                console.error(`🚨 [csv] ❌ Row ${index + 1} produced NO EVENTS - DETAILED ANALYSIS:`);
+                                
+                                // Create comprehensive error report
+                                const errorObj = {
+                                    line: index + 2,
+                                    errors: ['時間データが見つからないか解析に失敗しました'],
+                                    extractedData: {
+                                        id: eventId,
+                                        date: dateStr,
+                                        name: userName,
+                                        title: eventTitle
+                                    },
+                                    actualColumnAnalysis: {
+                                        roomCheckbox: {
+                                            column: '1:checkbox',
+                                            exists: '1:checkbox' in row,
+                                            value: row['1:checkbox'],
+                                            hasData: !!(row['1:checkbox'] && row['1:checkbox'].trim())
+                                        },
+                                        timeColumns: ['7:checkbox', '8:checkbox', '234:checkbox', '235:checkbox'].map(col => ({
+                                            column: col,
+                                            exists: col in row,
+                                            value: row[col],
+                                            hasData: !!(row[col] && row[col].trim())
+                                        }))
+                                    },
+                                    availableColumnsWithData: Object.entries(row)
+                                        .filter(([key, value]) => value && value.trim() !== '')
+                                        .slice(0, 20)
+                                        .map(([key, value]) => ({ column: key, value: value.substring(0, 50) })),
+                                    rowKeyCount: Object.keys(row).length
+                                };
+                                
+                                errors.push(errorObj);
+                                console.error(`🚨 [csv] ❌ Detailed error object:`, JSON.stringify(errorObj, null, 2));
+                                
+                                // Additional debugging: Show all room-related columns
+                                const roomRelatedColumns = Object.keys(row).filter(key => 
+                                    key.includes('会議室') || key.includes('相談室') || 
+                                    key.includes('テレワーク') || key.includes('時間')
+                                );
+                                console.error(`🚨 [csv] ❌ Room-related columns found in row:`, roomRelatedColumns);
+                                roomRelatedColumns.forEach(col => {
+                                    console.error(`🚨 [csv] ❌   "${col}" = "${row[col]}"`);
+                                });
+                            } else {
+                                console.log(`🚨 [csv] ✅ Row ${index + 1} successfully created ${rowEvents.length} events`);
+                                rowEvents.forEach((event, idx) => {
+                                    console.log(`🚨 [csv] ✅   Event ${idx + 1}: ${event.name} in ${event.room} from ${event.start} to ${event.end}`);
+                                });
+                            }
+                            
+                            console.log(`🚨🚨🚨 [csv] ===== FINISHED PROCESSING ROW ${index + 1} =====`);
+                        });
+                        
+                        // 🚨 BULLETPROOF UTILITY FUNCTIONS - ZERO ERROR TOLERANCE
+                        
+                        function parseUltraSafeTimeValue(timeValue) {
+                            console.log(`🚨 [parseUltraSafeTimeValue] === ENTRY POINT ===`);
+                            console.log(`🚨 [parseUltraSafeTimeValue] Input:`, timeValue, `(type: ${typeof timeValue})`);
+                            
+                            const parsedSlots = [];
+                            
+                            // ABSOLUTE input validation - prevent ALL undefined/null errors
+                            if (!timeValue || typeof timeValue !== 'string' || timeValue.trim() === '') {
+                                console.error(`🚨 [parseUltraSafeTimeValue] CRITICAL: Invalid input - returning empty array`);
+                                console.error(`🚨 [parseUltraSafeTimeValue] Input details: value="${timeValue}", type="${typeof timeValue}"`);
+                                return parsedSlots; // Return empty array safely
+                            }
+                            
+                            try {
+                                // Safe normalize and split operations
+                                const normalizedTimeRange = timeValue
+                                    .replace(/：/g, ':')      // Full-width colon to half-width
+                                    .replace(/〜/g, '～')      // Normalize wave dash
+                                    .replace(/−/g, '～')      // Em dash to wave dash
+                                    .replace(/-/g, '～')      // Hyphen to wave dash
+                                    .trim();
+                                
+                                console.log(`🚨 [parseUltraSafeTimeValue] Normalized: "${normalizedTimeRange}"`);
+                                
+                                // SAFE split operation with validation
+                                if (!normalizedTimeRange.includes(';')) {
+                                    // Single time range
+                                    const singleSlot = parseValidTimeSlot(normalizedTimeRange);
+                                    if (singleSlot) {
+                                        parsedSlots.push(singleSlot);
+                                        console.log(`🚨 [parseUltraSafeTimeValue] ✅ Single slot parsed:`, singleSlot);
+                                    }
+                                } else {
+                                    // Multiple time ranges
+                                    const timeRanges = normalizedTimeRange.split(';')
+                                        .map(t => t.trim())
+                                        .filter(t => t && t.length > 3); // Filter out incomplete times like "11"
+                                    
+                                    console.log(`🚨 [parseUltraSafeTimeValue] Split into ${timeRanges.length} ranges:`, timeRanges);
+                                    
+                                    timeRanges.forEach((range, idx) => {
+                                        console.log(`🚨 [parseUltraSafeTimeValue] Processing range ${idx + 1}: "${range}"`);
+                                        const slot = parseValidTimeSlot(range);
+                                        if (slot) {
+                                            parsedSlots.push(slot);
+                                            console.log(`🚨 [parseUltraSafeTimeValue] ✅ Valid slot ${idx + 1}:`, slot);
+                                        } else {
+                                            console.warn(`🚨 [parseUltraSafeTimeValue] ❌ Invalid slot ${idx + 1}: "${range}"`);
+                                        }
+                                    });
+                                }
+                                
+                            } catch (error) {
+                                console.error(`🚨 [parseUltraSafeTimeValue] EXCEPTION caught:`, error);
+                                console.error(`🚨 [parseUltraSafeTimeValue] Stack:`, error.stack);
+                                // Return empty array on any error
+                            }
+                            
+                            console.log(`🚨 [parseUltraSafeTimeValue] === RESULT: ${parsedSlots.length} valid slots ===`, parsedSlots);
+                            return parsedSlots;
+                        }
+                        
+                        function parseValidTimeSlot(timeRange) {
+                            if (!timeRange || typeof timeRange !== 'string') return null;
+                            
+                            const timeParts = timeRange.split('～');
+                            if (timeParts.length !== 2) return null;
+                            
+                            const startTime = timeParts[0].trim();
+                            const endTime = timeParts[1].trim();
+                            
+                            // Strict time format validation
+                            const timeRegex = /^\d{1,2}:\d{2}$/;
+                            if (timeRegex.test(startTime) && timeRegex.test(endTime)) {
+                                return { start: startTime, end: endTime };
+                            }
+                            
+                            return null;
+                        }
+                        
+                        function createUltraSafeEvent(id, room, title, dateStr, timeSlot, rowIndex, slotIndex) {
+                            console.log(`🚨 [createUltraSafeEvent] === ENTRY POINT ===`);
+                            console.log(`🚨 [createUltraSafeEvent] Inputs:`, { id, room, title, dateStr, timeSlot, rowIndex, slotIndex });
+                            
+                            try {
+                                // ABSOLUTE input validation
+                                if (!id || !room || !title || !dateStr || !timeSlot) {
+                                    console.error(`🚨 [createUltraSafeEvent] CRITICAL: Missing required inputs`);
+                                    return null;
+                                }
+                                
+                                if (!timeSlot.start || !timeSlot.end) {
+                                    console.error(`🚨 [createUltraSafeEvent] CRITICAL: Invalid timeSlot`, timeSlot);
+                                    return null;
+                                }
+                                
+                                // Ultra-safe date normalization
+                                const normalizedDate = ultraSafeDateNormalization(dateStr);
+                                if (!normalizedDate) {
+                                    console.error(`🚨 [createUltraSafeEvent] CRITICAL: Date normalization failed for "${dateStr}"`);
+                                    return null;
+                                }
+                                
+                                // Create ISO datetime strings
+                                const startDateTime = `${normalizedDate}T${timeSlot.start}:00`;
+                                const endDateTime = `${normalizedDate}T${timeSlot.end}:00`;
+                                
+                                console.log(`🚨 [createUltraSafeEvent] DateTime strings: "${startDateTime}" to "${endDateTime}"`);
+                                
+                                // Validate dates
+                                const startDate = new Date(startDateTime);
+                                const endDate = new Date(endDateTime);
+                                
+                                if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+                                    console.error(`🚨 [createUltraSafeEvent] CRITICAL: Invalid dates created`);
+                                    return null;
+                                }
+                                
+                                // Create unique event ID
+                                const uniqueId = `${id}_${room.replace(/[()]/g, '')}_${rowIndex}_${slotIndex}`;
+                                
+                                const eventObj = {
+                                    id: uniqueId,
+                                    room: room,
+                                    name: title,
+                                    start: startDate.toISOString(),
+                                    end: endDate.toISOString()
+                                };
+                                
+                                console.log(`🚨 [createUltraSafeEvent] ✅ SUCCESS:`, eventObj);
+                                return eventObj;
+                                
+                            } catch (error) {
+                                console.error(`🚨 [createUltraSafeEvent] EXCEPTION:`, error);
+                                console.error(`🚨 [createUltraSafeEvent] Stack:`, error.stack);
+                                return null;
+                            }
+                        }
+                        
+                        function ultraSafeDateNormalization(dateString) {
+                            if (!dateString || typeof dateString !== 'string' || dateString.trim() === '') {
+                                console.error(`🚨 [ultraSafeDateNormalization] Invalid input: "${dateString}"`);
+                                return null;
+                            }
+                            
+                            try {
+                                const parts = dateString.trim().split('/');
+                                if (parts.length === 3) {
+                                    const year = parts[0];
+                                    const month = String(parseInt(parts[1], 10)).padStart(2, '0');
+                                    const day = String(parseInt(parts[2], 10)).padStart(2, '0');
+                                    const result = `${year}-${month}-${day}`;
+                                    console.log(`🚨 [ultraSafeDateNormalization] "${dateString}" -> "${result}"`);
+                                    return result;
+                                }
+                            } catch (error) {
+                                console.error(`🚨 [ultraSafeDateNormalization] Exception:`, error);
+                            }
+                            
+                            console.error(`🚨 [ultraSafeDateNormalization] Failed to normalize: "${dateString}"`);
+                            return null;
+                        }
+                        
+                        function parseRobustTimeValue(timeValue) {
+                            if (!timeValue) return [];
+                            
+                            console.log(`🚨 [csv] parseRobustTimeValue input: "${timeValue}"`);
+                            
+                            // Split by semicolon for multiple time ranges
+                            const timeRanges = timeValue.split(';')
+                                .map(t => t.trim())
+                                .filter(t => t && t.length > 3); // Filter out incomplete times like "11"
+                            
+                            console.log(`🚨 [csv] Split into ${timeRanges.length} time ranges:`, timeRanges);
+                            
+                            const parsedSlots = [];
+                            
+                            timeRanges.forEach((range, idx) => {
+                                console.log(`🚨 [csv] Processing time range ${idx + 1}: "${range}"`);
+                                
+                                // Replace various separators and full-width characters
+                                let normalizedRange = range
+                                    .replace(/：/g, ':')      // Full-width colon to half-width
+                                    .replace(/〜/g, '～')      // Normalize wave dash
+                                    .replace(/−/g, '～')      // Em dash to wave dash
+                                    .replace(/-/g, '～')      // Hyphen to wave dash
+                                    .trim();
+                                
+                                console.log(`🚨 [csv] Normalized range: "${normalizedRange}"`);
+                                
+                                // Split by wave dash or similar
+                                const timeParts = normalizedRange.split('～');
+                                if (timeParts.length === 2) {
+                                    const startTime = timeParts[0].trim();
+                                    const endTime = timeParts[1].trim();
+                                    
+                                    console.log(`🚨 [csv] Extracted times - Start: "${startTime}", End: "${endTime}"`);
+                                    
+                                    // Validate time format (HH:MM)
+                                    const timeRegex = /^\d{1,2}:\d{2}$/;
+                                    if (timeRegex.test(startTime) && timeRegex.test(endTime)) {
+                                        parsedSlots.push({ start: startTime, end: endTime });
+                                        console.log(`🚨 [csv] ✅ Added valid time slot: ${startTime} - ${endTime}`);
+                                    } else {
+                                        console.warn(`🚨 [csv] ❌ Invalid time format - Start: "${startTime}", End: "${endTime}"`);
+                                    }
+                                } else {
+                                    console.warn(`🚨 [csv] ❌ Could not parse time range: "${range}" (parts: ${timeParts.length})`);
+                                }
+                            });
+                            
+                            console.log(`🚨 [csv] parseRobustTimeValue result: ${parsedSlots.length} slots`, parsedSlots);
+                            return parsedSlots;
+                        }
+                        
+                        function parseComplexTimeValue(timeValue) {
+                            if (!timeValue) return [];
+                            
+                            console.log(`🚨 [csv] parseComplexTimeValue input: "${timeValue}"`);
+                            
+                            // Split by semicolon for multiple time ranges
+                            const timeRanges = timeValue.split(';').map(t => t.trim()).filter(t => t);
+                            console.log(`🚨 [csv] Split into ${timeRanges.length} time ranges:`, timeRanges);
+                            
+                            const parsedSlots = [];
+                            
+                            timeRanges.forEach((range, idx) => {
+                                console.log(`🚨 [csv] Processing time range ${idx + 1}: "${range}"`);
+                                
+                                // Replace various separators and full-width characters
+                                let normalizedRange = range
+                                    .replace(/：/g, ':')      // Full-width colon to half-width
+                                    .replace(/〜/g, '～')      // Normalize wave dash
+                                    .replace(/−/g, '～')      // Em dash to wave dash
+                                    .replace(/-/g, '～');     // Hyphen to wave dash
+                                
+                                console.log(`🚨 [csv] Normalized range: "${normalizedRange}"`);
+                                
+                                // Split by wave dash or similar
+                                const timeParts = normalizedRange.split('～');
+                                if (timeParts.length === 2) {
+                                    const startTime = timeParts[0].trim();
+                                    const endTime = timeParts[1].trim();
+                                    
+                                    console.log(`🚨 [csv] Extracted times - Start: "${startTime}", End: "${endTime}"`);
+                                    
+                                    if (startTime && endTime) {
+                                        parsedSlots.push({ start: startTime, end: endTime });
+                                        console.log(`🚨 [csv] ✅ Added time slot: ${startTime} - ${endTime}`);
+                                    }
+                                } else {
+                                    console.warn(`🚨 [csv] ❌ Could not parse time range: "${range}"`);
+                                }
+                            });
+                            
+                            console.log(`🚨 [csv] parseComplexTimeValue result: ${parsedSlots.length} slots`, parsedSlots);
+                            return parsedSlots;
+                        }
+                        
+                        function createCompleteEvent(id, room, title, dateStr, timeSlot, rowIndex, slotIndex) {
+                            try {
+                                console.log(`🚨 [csv] createCompleteEvent called with:`, {
+                                    id, room, title, dateStr, timeSlot, rowIndex, slotIndex
+                                });
+                                
+                                // Normalize date string from YYYY/M/D to YYYY-MM-DD
+                                const normalizedDate = normalizeDateString(dateStr);
+                                if (!normalizedDate) {
+                                    console.error(`🚨 [csv] Failed to normalize date: "${dateStr}"`);
+                                    return null;
+                                }
+                                console.log(`🚨 [csv] Normalized date: "${normalizedDate}"`);
+                                
+                                // Create full datetime strings
+                                const startDateTime = `${normalizedDate}T${timeSlot.start}:00`;
+                                const endDateTime = `${normalizedDate}T${timeSlot.end}:00`;
+                                console.log(`🚨 [csv] DateTime strings - Start: "${startDateTime}", End: "${endDateTime}"`);
+                                
+                                // Validate by creating Date objects
+                                const startDate = new Date(startDateTime);
+                                const endDate = new Date(endDateTime);
+                                
+                                if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+                                    console.error(`🚨 [csv] Invalid dates created:`, { startDateTime, endDateTime });
+                                    return null;
+                                }
+                                
+                                console.log(`🚨 [csv] Valid dates created:`, { 
+                                    start: startDate.toISOString(), 
+                                    end: endDate.toISOString() 
+                                });
+                                
+                                // Create unique event ID
+                                const uniqueId = `${id}_${room.replace(/[()]/g, '')}_${rowIndex}_${slotIndex}`;
+                                
+                                const eventObj = {
+                                    id: uniqueId,
+                                    room: room,
+                                    name: title,
+                                    start: startDate.toISOString(),
+                                    end: endDate.toISOString()
+                                };
+                                
+                                console.log(`🚨 [csv] ✅ Complete event object created:`, eventObj);
+                                return eventObj;
+                                
+                            } catch (error) {
+                                console.error(`🚨 [csv] ❌ Error in createCompleteEvent:`, error);
+                                return null;
+                            }
+                        }
+                        
+                        function parseMultipleTimeSlots(timeValue) {
+                            if (!timeValue) return [];
+                            
+                            console.log(`🚨 [csv] Parsing multiple time slots from: "${timeValue}"`);
+                            
+                            // Split by semicolon for multiple time slots
+                            const slots = timeValue.split(';').map(slot => slot.trim()).filter(slot => slot);
+                            console.log(`🚨 [csv] Split time slots:`, slots);
+                            
+                            const parsedSlots = [];
+                            
+                            slots.forEach(slot => {
+                                const timeRange = parseTimeRange(slot);
+                                if (timeRange.start && timeRange.end) {
+                                    parsedSlots.push(timeRange);
+                                }
+                            });
+                            
+                            console.log(`🚨 [csv] Parsed time slots:`, parsedSlots);
+                            return parsedSlots;
+                        }
+                        
+                        function createEventFromTimeSlot(row, rowIndex, room, name, purpose, dateStr, timeSlot) {
+                            try {
+                                // Normalize date format
+                                const normalizedDate = normalizeDateString(dateStr);
+                                if (!normalizedDate) {
+                                    console.warn(`🚨 [csv] Failed to normalize date: ${dateStr}`);
+                                    return null;
+                                }
+                                
+                                // Create ISO datetime strings
+                                const startDateTime = `${normalizedDate}T${timeSlot.start}:00`;
+                                const endDateTime = `${normalizedDate}T${timeSlot.end}:00`;
+                                
+                                // Validate dates
+                                const startDate = new Date(startDateTime);
+                                const endDate = new Date(endDateTime);
+                                
+                                if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+                                    console.warn(`🚨 [csv] Invalid date created:`, { startDateTime, endDateTime });
+                                    return null;
+                                }
+                                
+                                // Create unique ID
+                                const eventId = row['回答番号'] || row['受付番号'] || 
+                                              `csv_${Date.now()}_${rowIndex}_${Math.random().toString(36).substr(2, 9)}`;
+                                
+                                const eventObj = {
+                                    id: `${eventId}_${room}_${timeSlot.start}`,
+                                    room: room,
+                                    name: purpose || name || '施設利用',
+                                    start: startDate.toISOString(),
+                                    end: endDate.toISOString()
+                                };
+                                
+                                console.log(`🚨 [csv] Created event object:`, eventObj);
+                                return eventObj;
+                                
+                            } catch (error) {
+                                console.error(`🚨 [csv] Error creating event:`, error);
+                                return null;
+                            }
+                        }
+                        
+                        // 🚨 ENHANCED UTILITY FUNCTIONS FOR DATE/TIME PARSING
+                        function parseTimeRange(timeStr) {
+                            if (!timeStr) return { start: null, end: null };
+                            
+                            console.log(`🚨 [csv] Parsing time string: "${timeStr}"`);
+                            
+                            // Replace full-width colons and various separators
+                            const normalized = timeStr.replace(/：/g, ':').replace(/〜/g, '～').replace(/-/g, '～');
+                            console.log(`🚨 [csv] Normalized time string: "${normalized}"`);
+                            
+                            // Split by common separators
+                            let parts = normalized.split('～');
+                            if (parts.length === 1) parts = normalized.split('-');
+                            if (parts.length === 1) parts = normalized.split('~');
+                            
+                            console.log(`🚨 [csv] Time parts after split:`, parts);
+                            
+                            if (parts.length === 2) {
+                                const start = parts[0].trim();
+                                const end = parts[1].trim();
+                                
+                                // Ensure HH:MM format
+                                const formatTime = (time) => {
+                                    if (time.includes(':')) return time;
+                                    if (time.length === 4) return `${time.substr(0, 2)}:${time.substr(2, 2)}`;
+                                    if (time.length === 3) return `${time.substr(0, 1)}:${time.substr(1, 2)}`;
+                                    return time;
+                                };
+                                
+                                const formattedStart = formatTime(start);
+                                const formattedEnd = formatTime(end);
+                                
+                                console.log(`🚨 [csv] Formatted time range:`, { start: formattedStart, end: formattedEnd });
+                                return { start: formattedStart, end: formattedEnd };
+                            }
+                            
+                            console.log(`🚨 [csv] Failed to parse time range`);
+                            return { start: null, end: null };
+                        }
+                        
+                        function normalizeDateString(dateStr) {
+                            if (!dateStr) return null;
+                            
+                            console.log(`🚨 [csv] Normalizing date string: "${dateStr}"`);
+                            
+                            // Handle various date formats: YYYY/M/D, YYYY-M-D, etc.
+                            let normalized = dateStr.replace(/[\/\-]/g, '-');
+                            
+                            // Ensure YYYY-MM-DD format
+                            const parts = normalized.split('-');
+                            if (parts.length === 3) {
+                                const year = parts[0].padStart(4, '0');
+                                const month = parts[1].padStart(2, '0');
+                                const day = parts[2].padStart(2, '0');
+                                normalized = `${year}-${month}-${day}`;
+                            }
+                            
+                            console.log(`🚨 [csv] Normalized date: "${normalized}"`);
+                            return normalized;
+                        }
+                        
+                        console.log('🚨 [csv] FINAL VALIDATION RESULTS:');
+                        console.log('🚨 [csv] Valid events for API submission:', validEvents);
+                        console.log('🚨 [csv] Valid events count:', validEvents.length);
+                        console.log('🚨 [csv] Invalid rows count:', errors.length);
+                        
+                        if (validEvents.length === 0) {
+                            console.error('🚨🚨🚨 [csv] ❌ NO VALID EVENTS FOUND - COMPREHENSIVE FINAL ANALYSIS:');
+                            console.error('🚨 [csv] ❌ Total rows processed:', results.data.length);
+                            console.error('🚨 [csv] ❌ Total errors recorded:', errors.length);
+                            console.error('🚨 [csv] ❌ CSV Headers detected (first 30):', Object.keys(results.data[0] || {}).slice(0, 30));
+                            
+                            console.error('🚨 [csv] FINAL VALIDATION ERRORS (DETAILS):');
+                            console.error(JSON.stringify(errors, null, 2));
+                            
+                            // Analyze common failure patterns
+                            const failureAnalysis = {
+                                totalRows: results.data.length,
+                                rowsWithErrors: errors.length,
+                                commonIssues: {
+                                    missingDate: errors.filter(e => e.errors.some(err => err.includes('date'))).length,
+                                    missingTimeData: errors.filter(e => e.errors.some(err => err.includes('時間'))).length,
+                                    noRoomColumns: errors.filter(e => 
+                                        e.roomColumnAnalysis && e.roomColumnAnalysis.every(room => !room.hasData)
+                                    ).length
+                                },
+                                sampleFailedRow: errors[0] || null,
+                                availableHeaders: Object.keys(results.data[0] || {}),
+                                roomRelatedHeaders: Object.keys(results.data[0] || {}).filter(key => 
+                                    key.includes('会議室') || key.includes('相談室') || 
+                                    key.includes('テレワーク') || key.includes('時間')
+                                )
+                            };
+                            
+                            console.error('🚨 [csv] ❌ FAILURE ANALYSIS:', JSON.stringify(failureAnalysis, null, 2));
+                            
+                            // Show detailed error message
+                            const errorSummary = errors.length > 0 
+                                ? `${errors.length}行でエラー: ${errors.slice(0, 2).map(e => e.errors.join(', ')).join(' | ')}`
+                                : 'CSVデータが認識できませんでした';
+                            
+                            showStatusBadge(`取り込み可能なデータがありません - ${errorSummary}`, 'error');
+                            return;
+                        } else {
+                            console.log('🚨 [csv] ✅ SUCCESS: Found', validEvents.length, 'valid events');
+                            validEvents.forEach((event, idx) => {
+                                console.log(`🚨 [csv] ✅ Valid Event ${idx + 1}:`, {
+                                    id: event.id,
+                                    room: event.room,
+                                    name: event.name,
+                                    start: event.start,
+                                    end: event.end
+                                });
+                            });
+                        }
+                        
+                        // Send to API with bulk flag
+                        try {
+                            console.log('🚨 [csv] Sending to API /api/logo?bulk=1 with', validEvents.length, 'events');
+                            
+                            const response = await fetch('/api/logo?bulk=1', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({ events: validEvents })
+                            });
+                            
+                            console.log('🚨 [csv] API response status:', response.status);
+                            console.log('🚨 [csv] API response ok:', response.ok);
+                            
+                            const result = await response.json();
+                            console.log('🚨 [csv] API response data:', result);
+                            
+                            if (response.ok) {
+                                const message = errors.length > 0 
+                                    ? `${result.imported || validEvents.length}件取り込み完了 / ${errors.length}件スキップ`
+                                    : `${result.imported || validEvents.length}件取り込み完了`;
+                                    
+                                console.log('🚨 [csv] ✅ SUCCESS:', message);
+                                showStatusBadge(message, 'success');
+                                
+                                // Refresh calendar to show new events
+                                console.log('🚨 [csv] Refreshing calendar with new events...');
+                                setTimeout(() => fetchEvents(), 1000);
+                                
+                                // Clear file input
+                                if (fileInput) fileInput.value = '';
+                            } else {
+                                console.error('🚨 [csv] ❌ API ERROR:', result);
+                                if (response.status === 422) {
+                                    showStatusBadge('CSVエラー: 詳細はコンソール', 'error');
+                                } else {
+                                    showStatusBadge('サーバエラーが発生しました', 'error');
+                                }
+                            }
+                            
+                        } catch (apiError) {
+                            console.error('🚨 [csv] ❌ API request failed:', apiError);
+                            showStatusBadge('サーバとの通信エラーが発生しました', 'error');
+                        }
+                    },
+                    error: function(error) {
+                        console.error('🚨 [csv] ❌ CSV parse error:', error);
+                        showStatusBadge('CSVファイルの解析に失敗しました', 'error');
+                    }
+                });
+                
+            } catch (fileError) {
+                console.error('🚨 [csv] ❌ File read error:', fileError);
+                showStatusBadge('ファイルの読み込みに失敗しました', 'error');
+            } finally {
+                // Re-enable button
+                if (uploadBtn) {
+                    uploadBtn.disabled = false;
+                    uploadBtn.textContent = '📄 CSV 取り込み';
+                }
+            }
+        };
+        
+        window.toggleAdminMode = function() {
+            console.log('🚨 [admin] toggleAdminMode function called - WINDOW VERSION');
+            
+            const adminPanel = document.getElementById('adminPanel');
+            const adminToggle = document.getElementById('adminToggle');
+            
+            if (!adminPanel || !adminToggle) {
+                console.error('🚨 [admin] Required elements not found');
+                return;
+            }
+            
+            adminMode = !adminMode;
+            adminPanel.style.display = adminMode ? 'block' : 'none';
+            adminToggle.textContent = adminMode ? '📅 カレンダー' : '🔧 管理モード';
+            adminToggle.classList.toggle('active', adminMode);
+            
+            if (adminMode) {
+                refreshEventsList();
+            }
+            
+            console.log('🚨 [admin] Admin mode toggled to:', adminMode);
+        };
+        
+        window.deleteEvent = function(eventId) {
+            console.log('🚨 [admin] deleteEvent called for:', eventId);
+            if (!confirm(`イベント ID: ${eventId} を削除しますか？`)) {
+                return;
+            }
+            
+            // Delete logic would go here
+            showStatusBadge('テスト：削除機能が動作しています', 'success');
+        };
+        
+        window.refreshEventsList = function() {
+            console.log('🚨 [admin] refreshEventsList called');
+            const eventsList = document.getElementById('eventsList');
+            if (eventsList) {
+                eventsList.innerHTML = '<p>テスト：管理パネルが動作しています</p>';
+            }
+        };
+        
+        // イベントの時間表示を整形するヘルパー関数
+        function formatEventTime(date) {
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            return `${hours}：${minutes}`;
+        }
+        
+        // Utility functions
+        const showStatusBadge = (message, type) => {
+            const badge = document.getElementById('statusBadge');
+            if (badge) {
+                badge.textContent = message;
+                badge.className = `status-badge status-${type}`;
+                badge.style.display = 'inline-block';
+                
+                setTimeout(() => {
+                    badge.style.display = 'none';
+                }, 5000);
+            }
+        };
+        
+        const showNoEvents = () => {
+            const calendar = document.getElementById('calendar');
+            const noEvents = document.getElementById('noEvents');
+            if (calendar) calendar.style.display = 'none';
+            if (noEvents) noEvents.style.display = 'block';
+        };
+        
+        // Initialize calendar with comprehensive error handling
+        const initCalendar = () => {
+            console.log('🚨 [calendar] Initializing calendar...');
+            const calendarElement = document.getElementById('calendar');
+            if (!calendarElement) {
+                console.error('❌ [calendar] Calendar element not found!');
+                return;
+            }
+
+            // Toast UI Calendarライブラリの読み込み状況を確認
+            const isToastUiModern = typeof toastui !== 'undefined' && typeof toastui.Calendar !== 'undefined';
+            const isTuiLegacy = typeof tui !== 'undefined' && typeof tui.Calendar !== 'undefined';
+
+            if (!isToastUiModern && !isTuiLegacy) {
+                console.error('❌ [calendar] Toast UI Calendar library not available!');
+                const statusElement = document.getElementById('statusMessage');
+                if (statusElement) {
+                    statusElement.textContent = 'エラー: カレンダーライブラリが読み込まれていません。';
+                    statusElement.style.color = 'red';
+                    statusElement.style.display = 'block';
+                }
+                return;
+            }
+
+            console.log('🚨 [calendar] Checking library availability:');
+            console.log('🚨 [calendar] - toastui:', isToastUiModern);
+            console.log('🚨 [calendar] - toastui.Calendar:', isToastUiModern);
+            console.log('🚨 [calendar] - tui (legacy):', isTuiLegacy);
+            console.log('🚨 [calendar] Calendar element found:', !!calendarElement);
+
+            const calendarOptions = {
+                defaultView: 'month', // カレンダーのデフォルト表示を月表示に設定
+                date: new Date(),     // カレンダーの初期表示日を今日が含まれる月に設定
+                usageStatistics: false, // 統計情報の送信を無効化（任意）
+                useCreationPopup: false,
+                useDetailPopup: true,
+                calendars: ROOMS.map((room) => ({
+                    id: room,
+                    name: room,
+                    backgroundColor: ROOM_COLORS[room] || '#007bff',
+                    borderColor: ROOM_COLORS[room] || '#007bff',
+                    dragBgColor: ROOM_COLORS[room] || '#007bff'
+                })),
+                // イベント表示のカスタマイズ
+                template: {
+                    // 時間指定イベントの表示テンプレート
+                    time: function (event) {
+                        // event.start と event.end は Date オブジェクト（TUI CalendarがISO文字列から変換済み）
+                        const startDate = new Date(event.start.getTime());
+                        const endDate = new Date(event.end.getTime());
+
+                        const displayTime = `${formatEventTime(startDate)}〜${formatEventTime(endDate)}`;
+
+                        // 名前と時間を表示します
+                        return `<span style="font-weight: bold;">${event.title}</span><br>${displayTime}`;
+                    },
+                    // 全日イベントの表示テンプレート（CSVにはないが念のため）
+                    allday: function (event) {
+                        return `<span style="font-weight: bold;">${event.title}</span>`;
+                    },
+                    // マイルストーンイベントの表示テンプレート（CSVにはないが念のため）
+                    milestone: function (event) {
+                        return `<span style="font-weight: bold;">${event.title}</span>`;
+                    },
+                    monthDayname: (dayname) => {
+                        const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
+                        return `<span class="toastui-calendar-weekday-name">${dayNames[dayname.day] || dayname.label}</span>`;
+                    }
+                },
+                // 月表示の設定（曜日名を日本語化）
+                month: {
+                    daynames: ['日', '月', '火', '水', '木', '金', '土'],
+                    visibleWeeksCount: 6, // 常に6週間表示で固定（カレンダーの高さが安定します）
+                    visibleEventCount: 10, // セルあたりの表示イベント数を増加
+                    moreLayerSize: {
+                        height: 'auto' // 「more」レイヤーの高さを自動調整
+                    },
+                    grid: {
+                        header: {
+                            height: 34
+                        },
+                        footer: {
+                            height: 34
+                        }
+                    }
+                },
+                // 週表示の設定（曜日名を日本語化、月表示なので今回は直接影響しないが定義）
+                week: {
+                    daynames: ['日', '月', '火', '水', '木', '金', '土'],
+                },
+                // タイムゾーン設定（日本時間に固定）
+                timezone: {
+                    zones: [
+                        {
+                            timezoneName: 'Asia/Tokyo',
+                            displayLabel: 'GMT+09:00',
+                        },
+                    ],
+                },
+            };
+
+            try {
+                let calendarInstance;
+                // 利用可能なライブラリに応じてインスタンスを生成
+                if (isToastUiModern) {
+                    console.log('🚨 [calendar] Creating calendar instance using toastui.Calendar...');
+                    calendarInstance = new toastui.Calendar(calendarElement, calendarOptions);
+                } else {
+                    console.log('🚨 [calendar] Creating calendar instance using tui.Calendar (legacy)...');
+                    calendarInstance = new tui.Calendar(calendarElement, calendarOptions);
+                }
+
+                // グローバル変数としてカレンダーインスタンスにアクセスできるように設定
+                window.calendar = calendarInstance;
+                calendar = calendarInstance;
+
+                console.log('🚨 [calendar] ✅ Toast UI Calendar initialized successfully!');
+                console.log('🚨 [calendar] Calendar instance:', calendar);
+                
+                // Initialize calendar display
+                const loading = document.getElementById('loading');
+                if (loading) loading.style.display = 'none';
+                calendarElement.style.display = 'block';
+                
+            } catch (error) {
+                console.error('🚨 [calendar] ❌ Calendar initialization failed:', error);
+                console.error('🚨 [calendar] Error details:', error.message);
+                console.error('🚨 [calendar] Stack trace:', error.stack);
+                
+                // Show error message in calendar container
+                calendarElement.innerHTML = `<div style="text-align: center; padding: 40px; color: #dc3545; font-size: 18px;"><strong>⚠️ カレンダーの初期化に失敗しました</strong><br><small>${error.message}</small></div>`;
+            }
+        };
+        
+        // Check environment setup
+        async function checkEnvironment() {
+            console.log('🚨 [env] Checking Vercel KV environment setup...');
+            // Vercel CLIで設定した環境変数はVercelデプロイ時には自動的に
+            // process.env.VITE_KV_REST_API_URL などとして利用可能ですが、
+            // 静的なHTMLファイルから直接アクセスする場合は、ビルド時に埋め込むか、
+            // API経由で取得する必要があります。
+            // 今回は簡易的にwindowオブジェクトに直接定義されることを想定します。
+            // ※ 実際のVercelの環境変数アクセスはサーバーサイド（/api/*）で行われます。
+            // ここはフロントエンドがAPIエラーを正しくハンドリングするためのログとUI処理です。
+
+            // フロントエンドで直接環境変数にアクセスすることはできません。
+            // しかし、APIからの応答で環境変数の問題が示されるため、
+            // その情報を受け取った際にユーザーに通知するロジックを強化します。
+            // 現状のcheckEnvironmentはKV_REST_API_URLとTOKENの存在チェックではなく、
+            // APIのエラーメッセージに応じてUIを更新するために利用します。
+
+            // KV設定の真のチェックは /api/events エンドポイントで行われるため、
+            // ここでは単にawait new Promise(r => setTimeout(r, 0)); を削除し、
+            // 実際にはフェッチ関数を呼び出すことでAPIからの応答を待ちます。
+            // この関数はUIのメッセージ表示に特化させます。
+
+            // UIに表示するためのステータスメッセージ要素を取得
+            const statusElement = document.getElementById('statusMessage');
+            if (!statusElement) {
+                console.warn('⚠️ [env] statusMessage element not found in DOM.');
+            }
+
+            // fetchEventsがAPIエラーを検出した場合に、このメッセージが表示されるようにします。
+            // このcheckEnvironment関数自体は、フロントエンドからは直接KV_REST_API_URLなどの
+            // 存在を判定できないため、APIからのエラー応答に依存します。
+            // そのため、ここでは直接的なチェックは行いません。
+
+            return true; // 常にtrueを返し、fetchEventsに進ませる。エラーはfetchEventsで処理。
+        }
+        
+        // Create test events for demo when API fails
+        const createTestEvents = () => {
+            console.log('🚨 [demo] Creating test events for demonstration...');
+            
+            const testEvents = [
+                {
+                    id: 'test-1',
+                    room: '会議室(さくら)',
+                    name: 'テストイベント1',
+                    start: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // Tomorrow
+                    end: new Date(Date.now() + 24 * 60 * 60 * 1000 + 2 * 60 * 60 * 1000).toISOString() // Tomorrow + 2 hours
+                },
+                {
+                    id: 'test-2',
+                    room: 'テレワークルームA',
+                    name: 'テストイベント2',
+                    start: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(), // Day after tomorrow
+                    end: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000 + 3 * 60 * 60 * 1000).toISOString() // Day after tomorrow + 3 hours
+                }
+            ];
+            
+            return testEvents;
+        };
+        
+        // Fetch events with calendar dependency check
+        async function fetchEvents() {
+            console.log('🚨 [calendar] Fetching events...');
+            // const envReady = await checkEnvironment(); // この呼び出しは不要、APIからの応答で判断
+
+            const statusElement = document.getElementById('statusMessage');
+            if (statusElement) {
+                statusElement.textContent = 'イベントデータを読み込み中...'; // 読み込み中のメッセージ
+                statusElement.style.color = 'gray';
+                statusElement.style.display = 'block';
+            }
+            
+            // Only proceed if calendar is initialized
+            if (!calendar) {
+                console.warn('🚨 [calendar] Calendar not initialized. Skipping event fetch.');
+                if (statusElement) {
+                    statusElement.textContent = 'カレンダーが初期化されていません。';
+                    statusElement.style.color = 'red';
+                }
+                showNoEvents();
+                return;
+            }
+            
+            try {
+                console.log('🚨 [calendar] Making API request to /api/events...');
+                const response = await fetch('/api/events');
+                console.log(`🚨 [calendar] API response status: ${response.status}`);
+                console.log(`🚨 [calendar] API response ok: ${response.ok}`);
+                console.log('🚨 [calendar] API response headers:', Object.fromEntries(response.headers.entries()));
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    console.error(`🚨 [calendar] ❌ API ERROR - Status: ${response.status}`);
+                    console.error(`🚨 [calendar] ❌ API ERROR - Response: ${JSON.stringify(errorData)}`);
+                    console.error(`🚨 [calendar] ❌ API ERROR - Parsed JSON:`, errorData);
+
+                    if (errorData.error && errorData.error.includes("ENV not set")) {
+                        console.error('🚨 [calendar] ❌ VERCEL KV ENVIRONMENT NOT CONFIGURED!');
+                        console.error('🚨 [calendar] ❌ Please set KV_REST_API_URL and KV_REST_API_TOKEN in Vercel dashboard');
+                        if (statusElement) {
+                            statusElement.textContent = 'エラー: Vercel KVデータベース設定が完了していません。VercelダッシュボードでKV_REST_API_URLとKV_REST_API_TOKENを設定し、再デプロイしてください。';
+                            statusElement.style.color = 'red';
+                        }
+                    } else {
+                        if (statusElement) {
+                            statusElement.textContent = `イベントデータの読み込みに失敗しました: ${errorData.error || response.statusText}`;
+                            statusElement.style.color = 'red';
+                        }
+                    }
+                    throw new Error(`API request failed with status ${response.status}: ${errorData.error || response.statusText}`);
+                }
+
+                const data = await response.json();
+                console.log('🚨 [calendar] ✅ Events fetched successfully:', data);
+                if (statusElement) {
+                    statusElement.textContent = 'イベントデータが正常に読み込まれました。';
+                    statusElement.style.color = 'green';
+                    // Hide status message after 3 seconds on success
+                    setTimeout(() => {
+                        statusElement.style.display = 'none';
+                    }, 3000);
+                }
+                
+                if (!data.events || !Array.isArray(data.events) || data.events.length === 0) {
+                    console.log('🚨 [calendar] No events found in API response');
+                    showNoEvents();
+                    return;
+                }
+                
+                displayEvents(data.events);
+                
+            } catch (error) {
+                console.error('🚨 [calendar] ❌ Error fetching events:', error);
+                if (statusElement) {
+                    statusElement.textContent = 'イベントデータの取得中に予期せぬエラーが発生しました。コンソールログを確認してください。';
+                    statusElement.style.color = 'red';
+                }
+                const loading = document.getElementById('loading');
+                if (loading) loading.textContent = 'エラーが発生しました';
+            }
+        }
+        
+        // Common function to display events on calendar
+        const displayEvents = (events) => {
+            console.log('🚨 [calendar] Displaying events:', events.length);
+            
+            if (!calendar) {
+                console.error('🚨 [calendar] ❌ Calendar not initialized, cannot display events');
+                return;
+            }
+            
+            if (!events || events.length === 0) {
+                console.log('🚨 [calendar] No events to display');
+                showNoEvents();
+                return;
+            }
+            
+            // Process and filter events
+            const filteredEvents = filterEventsBy30Days(events);
+            console.log('🚨 [calendar] Filtered events (30 days):', filteredEvents.length);
+            
+            if (filteredEvents.length === 0) {
+                showNoEvents();
+                return;
+            }
+            
+            // Show calendar and hide other states
+            const calendarEl = document.getElementById('calendar');
+            const noEvents = document.getElementById('noEvents');
+            const loading = document.getElementById('loading');
+            
+            if (loading) loading.style.display = 'none';
+            if (noEvents) noEvents.style.display = 'none';
+            if (calendarEl) calendarEl.style.display = 'block';
+            
+            // Convert and add events to calendar
+            const calendarEvents = convertToCalendarEvents(filteredEvents);
+            console.log('🚨 [calendar] Calendar events prepared:', calendarEvents);
+            
+            try {
+                calendar.clear();
+                calendar.createEvents(calendarEvents);
+                console.log('🚨 [calendar] ✅ Events successfully added to calendar!');
+                console.log('🚨 [calendar] ✅ Calendar should now be visible with', calendarEvents.length, 'events');
+            } catch (eventError) {
+                console.error('🚨 [calendar] ❌ Error adding events to calendar:', eventError);
+                
+                // Show error in calendar container
+                const calendarEl = document.getElementById('calendar');
+                if (calendarEl) {
+                    calendarEl.innerHTML = `<div style="text-align: center; padding: 40px; color: #dc3545; font-size: 18px;"><strong>⚠️ イベント表示エラー</strong><br><small>${eventError.message}</small></div>`;
+                }
+            }
+        };
+        
+        // Enhanced utility functions
+        const filterEventsBy30Days = (events) => {
+            const now = new Date();
+            const endDate = new Date(now.getTime() + HORIZON_DAYS * 24 * 60 * 60 * 1000);
+            
+            return events.filter(event => {
+                const eventDate = new Date(event.start);
+                return eventDate >= now && eventDate <= endDate;
+            });
+        };
+        
+        const convertToCalendarEvents = (apiEvents) => {
+            return apiEvents.map(event => {
+                const startDate = new Date(event.start);
+                const endDate = new Date(event.end);
+                
+                return {
+                    id: event.id.toString(),
+                    calendarId: event.room,
+                    title: `${event.name}`, // template.time function で使用される
+                    category: 'time',
+                    start: startDate,
+                    end: endDate,
+                    backgroundColor: ROOM_COLORS[event.room] || '#007bff',
+                    borderColor: ROOM_COLORS[event.room] || '#007bff',
+                    color: '#ffffff'
+                };
+            });
+        };
+        
+        console.log('🚨 [EMERGENCY] All functions registered to window object');
+        console.log('🚨 [EMERGENCY] uploadCSV available:', typeof window.uploadCSV);
+        console.log('🚨 [EMERGENCY] toggleAdminMode available:', typeof window.toggleAdminMode);
+        
+        // 🚨 DOMContentLoaded - ATTACH EVENT LISTENERS
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('🚨 [EMERGENCY] DOMContentLoaded fired - Starting UI binding');
+            
+            // CSV Upload Button
+            const csvUploadBtn = document.getElementById('csvUploadBtn');
+            if (csvUploadBtn) {
+                console.log('🚨 [app] CSV button found:', csvUploadBtn);
+                csvUploadBtn.addEventListener('click', () => {
+                    console.log('🚨 [csv] CSV upload button clicked via addEventListener');
+                    window.uploadCSV();
+                });
+                console.log('🚨 [app] CSV button event listener attached');
+            } else {
+                console.error('🚨 [app] ERROR: CSV upload button NOT FOUND');
+            }
+            
+            // Admin Toggle Button
+            const adminToggle = document.getElementById('adminToggle');
+            if (adminToggle) {
+                console.log('🚨 [app] Admin toggle found:', adminToggle);
+                adminToggle.addEventListener('click', () => {
+                    console.log('🚨 [admin] Admin toggle clicked via addEventListener');
+                    window.toggleAdminMode();
+                });
+                console.log('🚨 [app] Admin toggle event listener attached');
+            } else {
+                console.error('🚨 [app] ERROR: Admin toggle button NOT FOUND');
+            }
+            
+            // Refresh Button
+            const refreshBtn = document.getElementById('refreshBtn');
+            if (refreshBtn) {
+                console.log('🚨 [app] Refresh button found:', refreshBtn);
+                refreshBtn.addEventListener('click', () => {
+                    console.log('🚨 [admin] Refresh button clicked via addEventListener');
+                    window.refreshEventsList();
+                });
+                console.log('🚨 [app] Refresh button event listener attached');
+            } else {
+                console.error('🚨 [app] ERROR: Refresh button NOT FOUND');
+            }
+            
+            // Initialize calendar FIRST, then check environment and fetch events
+            console.log('🚨 [EMERGENCY] Starting calendar initialization...');
+            initCalendar();
+            
+            // Wait a bit for calendar to initialize, then check environment and fetch events
+            setTimeout(async () => {
+                console.log('🚨 [EMERGENCY] Starting environment check and event fetch...');
+                
+                // Check environment setup first
+                const envOk = await checkEnvironment();
+                
+                if (envOk) {
+                    console.log('🚨 [EMERGENCY] Environment OK, fetching real events...');
+                    fetchEvents();
+                } else {
+                    console.warn('🚨 [EMERGENCY] Environment issues detected, will show fallback UI');
+                    // fetchEvents() will handle the fallback UI display
+                    fetchEvents();
+                }
+            }, 500);
+            
+            console.log('🚨 [EMERGENCY] UI binding complete - ALL BUTTONS SHOULD WORK NOW');
+        });
+        
+        console.log('🚨 [EMERGENCY] Script execution complete - Functions ready');
+    </script>
+</body>
+</html>
