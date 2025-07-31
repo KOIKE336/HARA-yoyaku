@@ -1309,6 +1309,13 @@
             }
         };
         
+        // イベントの時間表示を整形するヘルパー関数
+        function formatEventTime(date) {
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            return `${hours}：${minutes}`;
+        }
+        
         // Utility functions
         const showStatusBadge = (message, type) => {
             const badge = document.getElementById('statusBadge');
@@ -1333,61 +1340,114 @@
         // Initialize calendar with comprehensive error handling
         const initCalendar = () => {
             console.log('🚨 [calendar] Initializing calendar...');
+            const calendarElement = document.getElementById('calendar');
+            if (!calendarElement) {
+                console.error('❌ [calendar] Calendar element not found!');
+                return;
+            }
+
+            // Toast UI Calendarライブラリの読み込み状況を確認
+            const isToastUiModern = typeof toastui !== 'undefined' && typeof toastui.Calendar !== 'undefined';
+            const isTuiLegacy = typeof tui !== 'undefined' && typeof tui.Calendar !== 'undefined';
+
+            if (!isToastUiModern && !isTuiLegacy) {
+                console.error('❌ [calendar] Toast UI Calendar library not available!');
+                const statusElement = document.getElementById('statusMessage');
+                if (statusElement) {
+                    statusElement.textContent = 'エラー: カレンダーライブラリが読み込まれていません。';
+                    statusElement.style.color = 'red';
+                    statusElement.style.display = 'block';
+                }
+                return;
+            }
+
             console.log('🚨 [calendar] Checking library availability:');
-            console.log('🚨 [calendar] - toastui:', typeof toastui !== 'undefined');
-            console.log('🚨 [calendar] - toastui.Calendar:', typeof toastui !== 'undefined' && typeof toastui.Calendar !== 'undefined');
-            console.log('🚨 [calendar] - tui (legacy):', typeof tui !== 'undefined');
-            
-            // Check for calendar element
-            const calendarEl = document.getElementById('calendar');
-            console.log('🚨 [calendar] Calendar element found:', !!calendarEl);
-            if (!calendarEl) {
-                console.error('🚨 [calendar] ERROR: Calendar container (#calendar) not found in HTML!');
-                return;
-            }
-            
-            // Check library availability with multiple fallbacks
-            let CalendarClass = null;
-            
-            if (typeof toastui !== 'undefined' && typeof toastui.Calendar !== 'undefined') {
-                CalendarClass = toastui.Calendar;
-                console.log('🚨 [calendar] Using toastui.Calendar');
-            } else if (typeof tui !== 'undefined' && typeof tui.Calendar !== 'undefined') {
-                CalendarClass = tui.Calendar;
-                console.log('🚨 [calendar] Using tui.Calendar (legacy)');
-            } else {
-                console.error('🚨 [calendar] CRITICAL ERROR: Toast UI Calendar library not available!');
-                console.error('🚨 [calendar] Available global objects:', Object.keys(window).filter(key => key.includes('ui') || key.includes('calendar')));
-                
-                // Show fallback message
-                calendarEl.innerHTML = '<div style="text-align: center; padding: 40px; color: #dc3545; font-size: 18px;"><strong>⚠️ カレンダーライブラリの読み込みに失敗しました</strong><br><small>ページを再読み込みしてください</small></div>';
-                return;
-            }
-            
-            try {
-                console.log('🚨 [calendar] Creating calendar instance...');
-                calendar = new CalendarClass(calendarEl, {
-                    defaultView: 'month',
-                    useCreationPopup: false,
-                    useDetailPopup: true,
-                    calendars: ROOMS.map((room) => ({
-                        id: room,
-                        name: room,
-                        backgroundColor: ROOM_COLORS[room] || '#007bff',
-                        borderColor: ROOM_COLORS[room] || '#007bff',
-                        dragBgColor: ROOM_COLORS[room] || '#007bff'
-                    })),
-                    template: {
-                        monthDayname: (dayname) => `<span class="toastui-calendar-weekday-name">${dayname.label}</span>`
+            console.log('🚨 [calendar] - toastui:', isToastUiModern);
+            console.log('🚨 [calendar] - toastui.Calendar:', isToastUiModern);
+            console.log('🚨 [calendar] - tui (legacy):', isTuiLegacy);
+            console.log('🚨 [calendar] Calendar element found:', !!calendarElement);
+
+            const calendarOptions = {
+                defaultView: 'month', // カレンダーのデフォルト表示を月表示に設定
+                date: new Date(),     // カレンダーの初期表示日を今日が含まれる月に設定
+                usageStatistics: false, // 統計情報の送信を無効化（任意）
+                useCreationPopup: false,
+                useDetailPopup: true,
+                calendars: ROOMS.map((room) => ({
+                    id: room,
+                    name: room,
+                    backgroundColor: ROOM_COLORS[room] || '#007bff',
+                    borderColor: ROOM_COLORS[room] || '#007bff',
+                    dragBgColor: ROOM_COLORS[room] || '#007bff'
+                })),
+                // イベント表示のカスタマイズ
+                template: {
+                    // 時間指定イベントの表示テンプレート
+                    time: function (event) {
+                        // event.start と event.end は Date オブジェクト（TUI CalendarがISO文字列から変換済み）
+                        const startDate = new Date(event.start.getTime());
+                        const endDate = new Date(event.end.getTime());
+
+                        const displayTime = `${formatEventTime(startDate)}〜${formatEventTime(endDate)}`;
+
+                        // 名前と時間を表示します
+                        return `<span style="font-weight: bold;">${event.title}</span><br>${displayTime}`;
+                    },
+                    // 全日イベントの表示テンプレート（CSVにはないが念のため）
+                    allday: function (event) {
+                        return `<span style="font-weight: bold;">${event.title}</span>`;
+                    },
+                    // マイルストーンイベントの表示テンプレート（CSVにはないが念のため）
+                    milestone: function (event) {
+                        return `<span style="font-weight: bold;">${event.title}</span>`;
+                    },
+                    monthDayname: (dayname) => {
+                        const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
+                        return `<span class="toastui-calendar-weekday-name">${dayNames[dayname.day] || dayname.label}</span>`;
                     }
-                });
+                },
+                // 月表示の設定（曜日名を日本語化）
+                month: {
+                    daynames: ['日', '月', '火', '水', '木', '金', '土'],
+                    visibleWeeksCount: 6, // 常に6週間表示で固定（カレンダーの高さが安定します）
+                },
+                // 週表示の設定（曜日名を日本語化、月表示なので今回は直接影響しないが定義）
+                week: {
+                    daynames: ['日', '月', '火', '水', '木', '金', '土'],
+                },
+                // タイムゾーン設定（日本時間に固定）
+                timezone: {
+                    zones: [
+                        {
+                            timezoneName: 'Asia/Tokyo',
+                            displayLabel: 'GMT+09:00',
+                        },
+                    ],
+                },
+            };
+
+            try {
+                let calendarInstance;
+                // 利用可能なライブラリに応じてインスタンスを生成
+                if (isToastUiModern) {
+                    console.log('🚨 [calendar] Creating calendar instance using toastui.Calendar...');
+                    calendarInstance = new toastui.Calendar(calendarElement, calendarOptions);
+                } else {
+                    console.log('🚨 [calendar] Creating calendar instance using tui.Calendar (legacy)...');
+                    calendarInstance = new tui.Calendar(calendarElement, calendarOptions);
+                }
+
+                // グローバル変数としてカレンダーインスタンスにアクセスできるように設定
+                window.calendar = calendarInstance;
+                calendar = calendarInstance;
+
                 console.log('🚨 [calendar] ✅ Toast UI Calendar initialized successfully!');
                 console.log('🚨 [calendar] Calendar instance:', calendar);
                 
                 // Initialize calendar display
                 const loading = document.getElementById('loading');
                 if (loading) loading.style.display = 'none';
-                calendarEl.style.display = 'block';
+                calendarElement.style.display = 'block';
                 
             } catch (error) {
                 console.error('🚨 [calendar] ❌ Calendar initialization failed:', error);
@@ -1395,7 +1455,7 @@
                 console.error('🚨 [calendar] Stack trace:', error.stack);
                 
                 // Show error message in calendar container
-                calendarEl.innerHTML = `<div style="text-align: center; padding: 40px; color: #dc3545; font-size: 18px;"><strong>⚠️ カレンダーの初期化に失敗しました</strong><br><small>${error.message}</small></div>`;
+                calendarElement.innerHTML = `<div style="text-align: center; padding: 40px; color: #dc3545; font-size: 18px;"><strong>⚠️ カレンダーの初期化に失敗しました</strong><br><small>${error.message}</small></div>`;
             }
         };
         
@@ -1613,7 +1673,7 @@
                 return {
                     id: event.id.toString(),
                     calendarId: event.room,
-                    title: `${event.name}`,
+                    title: `${event.name}`, // template.time function で使用される
                     category: 'time',
                     start: startDate,
                     end: endDate,
