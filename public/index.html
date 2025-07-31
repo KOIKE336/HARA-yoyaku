@@ -219,6 +219,9 @@
             <!-- 🚨 NO ONCLICK ATTRIBUTES - ONLY addEventListener -->
             <button id="refreshBtn" class="admin-btn">🔄 更新</button>
         </div>
+        
+        <!-- Status message element for API errors -->
+        <p id="statusMessage" style="color: grey; margin-top: 10px; display: none;"></p>
     </div>
     
     <div class="calendar-container">
@@ -335,13 +338,38 @@
                         console.log('🚨 [csv] Raw parsed CSV data:', results.data);
                         console.log('🚨 [csv] Number of rows:', results.data.length);
                         
+                        let parsedCsvData = results.data;
+                        const errors = []; // エラーを記録する配列
+
+                        // === 最終修正ロジック：最初のデータ行がヘッダーまたは説明行の場合にスキップ ===
+                        if (parsedCsvData.length > 0) {
+                            const firstActualRow = parsedCsvData[0]; // results.data[0]はCSVの2行目にあたる
+
+                            // 重要な列のデータが「予約したい日付を選択してください。」のような説明文であるかチェック
+                            const isInstructionRow = (
+                                firstActualRow['5:date'] === "予約したい日付を選択してください。" ||
+                                firstActualRow['7:checkbox'] === "会議室(さくら)の予約したい時間を選択してください。 [※仕様上30分単位の選択項目ですが、必ず連続した1時間単位で予約してください。]" ||
+                                firstActualRow['8:checkbox'] === "相談室(スミレ・コスモス)の予約したい時間を選択してください。 [※仕様上30分単位の選択項目ですが、必ず連続した1時間単位で予約してください。]" ||
+                                firstActualRow['234:checkbox'] === "テレワークルームAの予約したい時間を選択してください。 [※仕様上30分単位の選択項目ですが、必ず連続した1時間単位で予約してください。]" ||
+                                firstActualRow['235:checkbox'] === "テレワークルームBの予約したい時間を選択してください。 [※仕様上30分単位の選択項目ですが、必ず連続した1時間単位で予約してください。]"
+                            );
+
+                            if (isInstructionRow) {
+                                console.warn('⚠️ [csv] Detected an instruction/template row at the beginning (CSV line 2). Skipping this row.');
+                                parsedCsvData.shift(); // 最初の要素を削除してスキップ
+                            }
+                        }
+                        // === スキップロジックここまで ===
+
+                        console.log('🚨 [csv] Processed CSV data after initial skip (if any):', parsedCsvData);
+                        console.log('🚨 [csv] Number of rows to process:', parsedCsvData.length);
+                        
                         if (results.errors && results.errors.length > 0) {
                             console.warn('🚨 [csv] Parse warnings:', results.errors);
                         }
                         
                         // Validate and convert CSV data
                         const validEvents = [];
-                        const errors = [];
                         
                         // 🚨 COMPREHENSIVE CSV HEADER ANALYSIS AND DEBUGGING
                         console.log('🚨🚨🚨 [csv] ===== STARTING CSV PROCESSING ANALYSIS =====');
@@ -370,7 +398,7 @@
                             console.log('🚨 [csv] - 回答番号 value:', results.data[0]['回答番号']);
                         }
                         
-                        results.data.forEach((row, index) => {
+                        parsedCsvData.forEach((row, index) => {
                             console.log(`🚨🚨🚨 [csv] ===== PROCESSING ROW ${index + 1} =====`);
                             console.log(`🚨 [csv] --- Processing new row ---`);
                             console.log(`🚨 [csv] Raw row data (full object):`, row);
@@ -1372,26 +1400,40 @@
         };
         
         // Check environment setup
-        const checkEnvironment = async () => {
+        async function checkEnvironment() {
             console.log('🚨 [env] Checking Vercel KV environment setup...');
-            try {
-                const response = await fetch('/api/env-check');
-                const envStatus = await response.json();
-                console.log('🚨 [env] Environment status:', envStatus);
-                
-                if (!envStatus.urlSet || !envStatus.tokenSet) {
-                    console.error('🚨 [env] ❌ Vercel KV environment variables not configured!');
-                    console.error('🚨 [env] ❌ URL set:', envStatus.urlSet, 'TOKEN set:', envStatus.tokenSet);
-                    return false;
-                }
-                
-                console.log('🚨 [env] ✅ Vercel KV environment properly configured');
-                return true;
-            } catch (error) {
-                console.error('🚨 [env] ❌ Environment check failed:', error);
-                return false;
+            // Vercel CLIで設定した環境変数はVercelデプロイ時には自動的に
+            // process.env.VITE_KV_REST_API_URL などとして利用可能ですが、
+            // 静的なHTMLファイルから直接アクセスする場合は、ビルド時に埋め込むか、
+            // API経由で取得する必要があります。
+            // 今回は簡易的にwindowオブジェクトに直接定義されることを想定します。
+            // ※ 実際のVercelの環境変数アクセスはサーバーサイド（/api/*）で行われます。
+            // ここはフロントエンドがAPIエラーを正しくハンドリングするためのログとUI処理です。
+
+            // フロントエンドで直接環境変数にアクセスすることはできません。
+            // しかし、APIからの応答で環境変数の問題が示されるため、
+            // その情報を受け取った際にユーザーに通知するロジックを強化します。
+            // 現状のcheckEnvironmentはKV_REST_API_URLとTOKENの存在チェックではなく、
+            // APIのエラーメッセージに応じてUIを更新するために利用します。
+
+            // KV設定の真のチェックは /api/events エンドポイントで行われるため、
+            // ここでは単にawait new Promise(r => setTimeout(r, 0)); を削除し、
+            // 実際にはフェッチ関数を呼び出すことでAPIからの応答を待ちます。
+            // この関数はUIのメッセージ表示に特化させます。
+
+            // UIに表示するためのステータスメッセージ要素を取得
+            const statusElement = document.getElementById('statusMessage');
+            if (!statusElement) {
+                console.warn('⚠️ [env] statusMessage element not found in DOM.');
             }
-        };
+
+            // fetchEventsがAPIエラーを検出した場合に、このメッセージが表示されるようにします。
+            // このcheckEnvironment関数自体は、フロントエンドからは直接KV_REST_API_URLなどの
+            // 存在を判定できないため、APIからのエラー応答に依存します。
+            // そのため、ここでは直接的なチェックは行いません。
+
+            return true; // 常にtrueを返し、fetchEventsに進ませる。エラーはfetchEventsで処理。
+        }
         
         // Create test events for demo when API fails
         const createTestEvents = () => {
@@ -1418,12 +1460,24 @@
         };
         
         // Fetch events with calendar dependency check
-        const fetchEvents = async () => {
+        async function fetchEvents() {
             console.log('🚨 [calendar] Fetching events...');
+            // const envReady = await checkEnvironment(); // この呼び出しは不要、APIからの応答で判断
+
+            const statusElement = document.getElementById('statusMessage');
+            if (statusElement) {
+                statusElement.textContent = 'イベントデータを読み込み中...'; // 読み込み中のメッセージ
+                statusElement.style.color = 'gray';
+                statusElement.style.display = 'block';
+            }
             
             // Only proceed if calendar is initialized
             if (!calendar) {
                 console.warn('🚨 [calendar] Calendar not initialized. Skipping event fetch.');
+                if (statusElement) {
+                    statusElement.textContent = 'カレンダーが初期化されていません。';
+                    statusElement.style.color = 'red';
+                }
                 showNoEvents();
                 return;
             }
@@ -1431,48 +1485,42 @@
             try {
                 console.log('🚨 [calendar] Making API request to /api/events...');
                 const response = await fetch('/api/events');
-                
-                console.log('🚨 [calendar] API response status:', response.status);
-                console.log('🚨 [calendar] API response ok:', response.ok);
-                console.log('🚨 [calendar] API response headers:', Object.fromEntries(response.headers));
-                
-                // Handle non-200 responses
+                console.log(`🚨 [calendar] API response status: ${response.status}`);
+                console.log(`🚨 [calendar] API response ok: ${response.ok}`);
+                console.log('🚨 [calendar] API response headers:', Object.fromEntries(response.headers.entries()));
+
                 if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error('🚨 [calendar] ❌ API ERROR - Status:', response.status);
-                    console.error('🚨 [calendar] ❌ API ERROR - Response:', errorText);
-                    
-                    try {
-                        const errorJson = JSON.parse(errorText);
-                        console.error('🚨 [calendar] ❌ API ERROR - Parsed JSON:', errorJson);
-                        
-                        // Show specific error message for KV environment issues
-                        if (errorJson.error && errorJson.error.includes('ENV not set')) {
-                            console.error('🚨 [calendar] ❌ VERCEL KV ENVIRONMENT NOT CONFIGURED!');
-                            console.error('🚨 [calendar] ❌ Please set KV_REST_API_URL and KV_REST_API_TOKEN in Vercel dashboard');
-                            
-                            const loading = document.getElementById('loading');
-                            if (loading) loading.innerHTML = '<div style="color: #dc3545; text-align: center; padding: 20px;"><strong>❌ Vercel KV環境変数が未設定です</strong><br><small>KV_REST_API_URL and KV_REST_API_TOKEN required</small><br><br><button onclick="fetchEventsWithFallback()" style="background: #007bff; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">🔄 テストデータで再試行</button></div>';
-                            
-                            // Make fetchEventsWithFallback globally available
-                            window.fetchEventsWithFallback = () => {
-                                console.log('🚨 [demo] User requested fallback to test data');
-                                const testEvents = createTestEvents();
-                                displayEvents(testEvents);
-                            };
-                            return;
+                    const errorData = await response.json();
+                    console.error(`🚨 [calendar] ❌ API ERROR - Status: ${response.status}`);
+                    console.error(`🚨 [calendar] ❌ API ERROR - Response: ${JSON.stringify(errorData)}`);
+                    console.error(`🚨 [calendar] ❌ API ERROR - Parsed JSON:`, errorData);
+
+                    if (errorData.error && errorData.error.includes("ENV not set")) {
+                        console.error('🚨 [calendar] ❌ VERCEL KV ENVIRONMENT NOT CONFIGURED!');
+                        console.error('🚨 [calendar] ❌ Please set KV_REST_API_URL and KV_REST_API_TOKEN in Vercel dashboard');
+                        if (statusElement) {
+                            statusElement.textContent = 'エラー: Vercel KVデータベース設定が完了していません。VercelダッシュボードでKV_REST_API_URLとKV_REST_API_TOKENを設定し、再デプロイしてください。';
+                            statusElement.style.color = 'red';
                         }
-                    } catch (jsonError) {
-                        console.error('🚨 [calendar] Error parsing API error response as JSON:', jsonError);
+                    } else {
+                        if (statusElement) {
+                            statusElement.textContent = `イベントデータの読み込みに失敗しました: ${errorData.error || response.statusText}`;
+                            statusElement.style.color = 'red';
+                        }
                     }
-                    
-                    throw new Error(`API Error ${response.status}: ${errorText}`);
+                    throw new Error(`API request failed with status ${response.status}: ${errorData.error || response.statusText}`);
                 }
-                
+
                 const data = await response.json();
-                console.log('🚨 [calendar] ✅ API SUCCESS - Raw response:', data);
-                console.log('🚨 [calendar] ✅ API SUCCESS - Data type:', typeof data);
-                console.log('🚨 [calendar] ✅ API SUCCESS - Data keys:', Object.keys(data));
+                console.log('🚨 [calendar] ✅ Events fetched successfully:', data);
+                if (statusElement) {
+                    statusElement.textContent = 'イベントデータが正常に読み込まれました。';
+                    statusElement.style.color = 'green';
+                    // Hide status message after 3 seconds on success
+                    setTimeout(() => {
+                        statusElement.style.display = 'none';
+                    }, 3000);
+                }
                 
                 if (!data.events || !Array.isArray(data.events) || data.events.length === 0) {
                     console.log('🚨 [calendar] No events found in API response');
@@ -1484,10 +1532,14 @@
                 
             } catch (error) {
                 console.error('🚨 [calendar] ❌ Error fetching events:', error);
+                if (statusElement) {
+                    statusElement.textContent = 'イベントデータの取得中に予期せぬエラーが発生しました。コンソールログを確認してください。';
+                    statusElement.style.color = 'red';
+                }
                 const loading = document.getElementById('loading');
                 if (loading) loading.textContent = 'エラーが発生しました';
             }
-        };
+        }
         
         // Common function to display events on calendar
         const displayEvents = (events) => {
