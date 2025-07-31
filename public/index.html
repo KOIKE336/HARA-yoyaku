@@ -72,6 +72,19 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             padding: 20px;
             height: 800px;
+            overflow: auto; /* スクロール可能にしてイベントが多い日も対応 */
+        }
+        
+        /* カレンダーイベントの表示を改善 */
+        .toastui-calendar-month-grid-cell {
+            min-height: 120px !important; /* セルの最小高さを増やす */
+        }
+        
+        .toastui-calendar-month-event {
+            margin-bottom: 1px !important;
+            font-size: 11px !important;
+            line-height: 1.2 !important;
+            padding: 1px 3px !important;
         }
         
         #calendar {
@@ -371,6 +384,45 @@
                         // Validate and convert CSV data
                         const validEvents = [];
                         
+                        // 連続時間帯を集約するためのヘルパー関数
+                        function consolidateConsecutiveTimeSlots(timeSlots) {
+                            if (!timeSlots || timeSlots.length === 0) return [];
+                            if (timeSlots.length === 1) return timeSlots;
+                            
+                            console.log(`🚨 [consolidate] Input slots:`, timeSlots);
+                            
+                            // 時間順にソート
+                            const sortedSlots = [...timeSlots].sort((a, b) => {
+                                const timeA = a.start.split(':').map(n => parseInt(n));
+                                const timeB = b.start.split(':').map(n => parseInt(n));
+                                return (timeA[0] * 60 + timeA[1]) - (timeB[0] * 60 + timeB[1]);
+                            });
+                            
+                            const consolidated = [];
+                            let currentSlot = { ...sortedSlots[0] };
+                            
+                            for (let i = 1; i < sortedSlots.length; i++) {
+                                const nextSlot = sortedSlots[i];
+                                
+                                // 現在のスロットの終了時間と次のスロットの開始時間が連続しているかチェック
+                                if (currentSlot.end === nextSlot.start) {
+                                    // 連続している場合、終了時間を延長
+                                    currentSlot.end = nextSlot.end;
+                                    console.log(`🚨 [consolidate] Merged slots: ${currentSlot.start}〜${currentSlot.end}`);
+                                } else {
+                                    // 連続していない場合、現在のスロットを結果に追加し、新しいスロットを開始
+                                    consolidated.push(currentSlot);
+                                    currentSlot = { ...nextSlot };
+                                }
+                            }
+                            
+                            // 最後のスロットを追加
+                            consolidated.push(currentSlot);
+                            
+                            console.log(`🚨 [consolidate] Output slots:`, consolidated);
+                            return consolidated;
+                        }
+                        
                         // 🚨 COMPREHENSIVE CSV HEADER ANALYSIS AND DEBUGGING
                         console.log('🚨🚨🚨 [csv] ===== STARTING CSV PROCESSING ANALYSIS =====');
                         console.log('🚨 [csv] Total rows found:', results.data.length);
@@ -433,10 +485,12 @@
                             console.log(`🚨 [csv]   91:firstname exists:`, '91:firstname' in row, 'value:', row['91:firstname']);
                             
                             if (row['244:lastname'] && row['244:firstname']) {
-                                userName = `${row['244:lastname']}${row['244:firstname']}`;
+                                // 名 + 姓の順で表示（例: 太郎 山田）
+                                userName = `${row['244:firstname']} ${row['244:lastname']}`;
                                 console.log(`🚨 [csv] ✅ Extracted Name from 244 fields: "${userName}"`);
                             } else if (row['91:lastname'] && row['91:firstname']) {
-                                userName = `${row['91:lastname']}${row['91:firstname']}`;
+                                // 名 + 姓の順で表示（例: 太郎 山田）
+                                userName = `${row['91:firstname']} ${row['91:lastname']}`;
                                 console.log(`🚨 [csv] ✅ Extracted Name from 91 fields: "${userName}"`);
                             } else {
                                 userName = row['92:text'] || row['93:text'] || '予約者';
@@ -599,8 +653,12 @@
                             console.log(`🚨 [csv] ✅ Proceeding with time parsing for: "${foundTimeValue}"`);
                             
                             // Parse the semicolon-separated time values with bulletproof error handling
-                            const timeSlots = parseUltraSafeTimeValue(foundTimeValue);
-                            console.log(`🚨 [csv] Parsed ${timeSlots.length} time slots from "${foundTimeValue}":`, timeSlots);
+                            const rawTimeSlots = parseUltraSafeTimeValue(foundTimeValue);
+                            console.log(`🚨 [csv] Parsed ${rawTimeSlots.length} raw time slots from "${foundTimeValue}":`, rawTimeSlots);
+                            
+                            // 連続する時間帯を集約
+                            const timeSlots = consolidateConsecutiveTimeSlots(rawTimeSlots);
+                            console.log(`🚨 [csv] Consolidated to ${timeSlots.length} time slots:`, timeSlots);
                             
                             if (timeSlots.length === 0) {
                                 console.error(`🚨 [csv] ❌ Row ${index + 1}: No valid time slots parsed from "${foundTimeValue}"`);
@@ -1410,6 +1468,18 @@
                 month: {
                     daynames: ['日', '月', '火', '水', '木', '金', '土'],
                     visibleWeeksCount: 6, // 常に6週間表示で固定（カレンダーの高さが安定します）
+                    visibleEventCount: 10, // セルあたりの表示イベント数を増加
+                    moreLayerSize: {
+                        height: 'auto' // 「more」レイヤーの高さを自動調整
+                    },
+                    grid: {
+                        header: {
+                            height: 34
+                        },
+                        footer: {
+                            height: 34
+                        }
+                    }
                 },
                 // 週表示の設定（曜日名を日本語化、月表示なので今回は直接影響しないが定義）
                 week: {
