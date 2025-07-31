@@ -35,31 +35,33 @@ export default async function handler(req, res) {
   try {
     const data = req.body || {};
     const isBulkImport = req.query.bulk === '1';
-    console.log('[kv] Request data:', JSON.stringify(data));
-    console.log('[kv] Is bulk import:', isBulkImport);
+    const isReplaceMode = req.query.replace === '1';
+    console.log('[logo] Request data:', JSON.stringify(data));
+    console.log('[logo] Is bulk import:', isBulkImport);
+    console.log('[logo] Replace mode:', isReplaceMode);
     
-    // 現在のイベントデータを取得
-    const events = await kv.get('events') || [];
-    console.log('[kv] Current events before processing:', events.length);
+    // 現在のイベントデータを取得 (replace mode では空配列から開始)
+    const events = isReplaceMode ? [] : (await kv.get('events') || []);
+    console.log(`[logo] Starting with ${events.length} existing events (replace mode: ${isReplaceMode})`);
 
     if (isBulkImport) {
       // CSV一括処理モード
       console.log('[kv] 🚨 BULK IMPORT MODE ACTIVATED');
       
       if (!data.events || !Array.isArray(data.events)) {
-        console.error('[kv] ❌ Bulk import: events array missing or invalid');
+        console.error('[logo] ❌ Bulk import: events array missing or invalid');
         return res.status(400).json({ error: 'Missing or invalid events array for bulk import' });
       }
       
-      console.log('[kv] 🚨 Processing', data.events.length, 'events for bulk import');
+      console.log(`[logo] Processing ${data.events.length} events for bulk import`);
       let importedCount = 0;
       
       // 各イベントを処理 - forEach を for...of に変更して同期処理を確実にする
       for (const [index, eventData] of data.events.entries()) {
-        console.log(`[kv] 🚨 Processing bulk event ${index + 1}:`, eventData);
+        console.log(`[logo] Processing bulk event ${index + 1}:`, eventData);
         
         if (!eventData.id || !eventData.room || !eventData.name || !eventData.start || !eventData.end) {
-          console.warn(`[kv] ❌ Skipping invalid event ${index + 1}: missing required fields`);
+          console.warn(`[logo] ❌ Skipping invalid event ${index + 1}: missing required fields`);
           continue;
         }
         
@@ -71,13 +73,20 @@ export default async function handler(req, res) {
           end: eventData.end
         };
         
-        const existingIndex = events.findIndex(e => e.id === event.id);
-        if (existingIndex >= 0) {
-          events[existingIndex] = event;
-          console.log(`[kv] 🚨 Updated existing event: ${event.id}`);
-        } else {
+        // In replace mode, always add new events
+        // In append mode, check for existing events
+        if (isReplaceMode) {
           events.push(event);
-          console.log(`[kv] 🚨 Added new event: ${event.id}`);
+          console.log(`[logo] Added new event in replace mode: ${event.id}`);
+        } else {
+          const existingIndex = events.findIndex(e => e.id === event.id);
+          if (existingIndex >= 0) {
+            events[existingIndex] = event;
+            console.log(`[logo] Updated existing event: ${event.id}`);
+          } else {
+            events.push(event);
+            console.log(`[logo] Added new event: ${event.id}`);
+          }
         }
         
         importedCount++;
@@ -86,10 +95,11 @@ export default async function handler(req, res) {
       // KV書き込みにエラーハンドリングを追加
       try {
         await kv.set('events', events);
-        console.log('[kv] ✅ BULK IMPORT SUCCESS:', importedCount, 'events imported, total:', events.length);
+        const modeText = isReplaceMode ? 'REPLACE' : 'APPEND';
+        console.log(`[logo] ✅ BULK IMPORT SUCCESS (${modeText}): ${importedCount} events imported, total: ${events.length}`);
       } catch (kvError) {
-        console.error('[kv] ❌ KV WRITE ERROR during bulk import:', kvError.message);
-        console.error('[kv] ❌ KV WRITE Stack trace:', kvError.stack);
+        console.error('[logo] ❌ KV WRITE ERROR during bulk import:', kvError.message);
+        console.error('[logo] ❌ KV WRITE Stack trace:', kvError.stack);
         return res.status(500).json({ 
           error: 'Database write failed', 
           details: kvError.message,
@@ -101,7 +111,8 @@ export default async function handler(req, res) {
       res.status(200).json({ 
         status: 'ok', 
         imported: importedCount,
-        total: events.length 
+        total: events.length,
+        mode: isReplaceMode ? 'replace' : 'append'
       });
       
     } else {

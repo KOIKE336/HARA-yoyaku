@@ -1,403 +1,568 @@
-console.log('🚀 [app] LATEST script.js loaded (version 20250130210000) - CACHE BUSTED!');
-console.log('🚀 [app] This is the NEW VERSION - NOT deprecated!');
-
-const HORIZON_DAYS = 30;
+// Grid Calendar Implementation
 const ROOMS = ['会議室(さくら)', '相談室(スミレ・コスモス)', 'テレワークルームA', 'テレワークルームB'];
-
 const ROOM_COLORS = {
-    '会議室(さくら)': '#ff69b4',
-    '相談室(スミレ・コスモス)': '#9370db',
-    'テレワークルームA': '#87ceeb',
-    'テレワークルームB': '#90ee90'
+    '会議室(さくら)': 'room-sakura',
+    '相談室(スミレ・コスモス)': 'room-violet', 
+    'テレワークルームA': 'room-telework-a',
+    'テレワークルームB': 'room-telework-b'
 };
 
-let calendar;
+let currentWeekStart = new Date();
 let currentEvents = [];
 let adminMode = false;
 
-document.addEventListener('DOMContentLoaded', () => {
-    console.log('[app] init start');
-    
-    if (typeof toastui === 'undefined') {
-        console.error('[app] Toast UI Calendar not loaded');
-        return;
-    }
-    
-    initCalendar();
-    bindUI();
-    fetchEvents();
-    
-    setInterval(fetchEvents, 30000);
-    
-    console.log('[app] init done');
-});
+// DOM element cache
+const domCache = {};
 
-const initCalendar = () => {
-    const calendarEl = document.getElementById('calendar');
-    
-    calendar = new toastui.Calendar(calendarEl, {
-        defaultView: 'month',
-        useCreationPopup: false,
-        useDetailPopup: true,
-        calendars: ROOMS.map((room) => ({
-            id: room,
-            name: room,
-            backgroundColor: ROOM_COLORS[room] || '#007bff',
-            borderColor: ROOM_COLORS[room] || '#007bff',
-            dragBgColor: ROOM_COLORS[room] || '#007bff'
-        })),
-        template: {
-            monthDayname: (dayname) => `<span class="toastui-calendar-weekday-name">${dayname.label}</span>`
-        }
+function getCachedElement(id) {
+    if (!domCache[id]) {
+        domCache[id] = document.getElementById(id);
+    }
+    return domCache[id];
+}
+
+// Get Monday of current week
+function getWeekStart(date = new Date()) {
+    const d = new Date(date);
+    const day = d.getDay();
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    return new Date(d.setDate(diff));
+}
+
+// Format date for display
+function formatDate(date) {
+    return date.toLocaleDateString('ja-JP', {
+        month: 'numeric',
+        day: 'numeric'
     });
-};
+}
 
-const bindUI = () => {
-    console.log('[app] Starting UI binding...');
+// Format week range
+function formatWeekRange(start) {
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
     
-    const csvUploadBtn = document.getElementById('csvUploadBtn');
-    const adminToggle = document.getElementById('adminToggle');
-    const refreshBtn = document.getElementById('refreshBtn');
-    
-    console.log('[app] CSV button:', csvUploadBtn);
-    console.log('[app] Admin toggle:', adminToggle);
-    console.log('[app] Refresh button:', refreshBtn);
-    
-    if (csvUploadBtn) {
-        console.log('[app] CSV button found. Attaching listener.');
-        csvUploadBtn.addEventListener('click', () => {
-            console.log('[csv] CSV upload button clicked.');
-            uploadCSV();
-        });
-    } else {
-        console.error('[app] CSV button not found!');
-    }
-    
-    if (adminToggle) {
-        console.log('[app] Admin toggle found. Attaching listener.');
-        adminToggle.addEventListener('click', () => {
-            console.log('[admin] Admin mode button clicked.');
-            toggleAdminMode();
-        });
-    } else {
-        console.error('[app] Admin toggle not found!');
-    }
-    
-    if (refreshBtn) {
-        console.log('[app] Refresh button found. Attaching listener.');
-        refreshBtn.addEventListener('click', () => {
-            console.log('[admin] Refresh button clicked.');
-            refreshEventsList();
-        });
-    } else {
-        console.error('[app] Refresh button not found!');
-    }
-    
-    console.log('[app] UI binding complete.');
-};
+    return `${start.getFullYear()}年${start.getMonth() + 1}月${start.getDate()}日 - ${end.getMonth() + 1}月${end.getDate()}日`;
+}
 
-const filterEventsBy30Days = (events) => {
-    const now = new Date();
-    const endDate = new Date(now.getTime() + HORIZON_DAYS * 24 * 60 * 60 * 1000);
+// Get day name in Japanese
+function getDayName(dayIndex) {
+    const days = ['日', '月', '火', '水', '木', '金', '土'];
+    return days[dayIndex];
+}
+
+// Initialize current week to Monday of this week
+currentWeekStart = getWeekStart();
+
+// Status message helper
+function showStatus(message, type) {
+    const badge = getCachedElement('statusBadge');
+    if (badge) {
+        badge.textContent = message;
+        badge.className = `status-badge status-${type}`;
+        badge.style.display = 'inline-block';
+        
+        setTimeout(() => {
+            badge.style.display = 'none';
+        }, 5000);
+    }
+    console.log(`[status] ${type.toUpperCase()}: ${message}`);
+}
+
+// Render calendar grid
+function renderCalendar() {
+    const calendar = getCachedElement('calendar');
+    const weekInfo = getCachedElement('weekInfo');
     
-    return events.filter(event => {
+    if (!calendar || !weekInfo) return;
+    
+    // Update week info
+    weekInfo.textContent = formatWeekRange(currentWeekStart);
+    
+    // Clear calendar
+    calendar.innerHTML = '';
+    
+    // Create header row
+    const headerRow = document.createElement('div');
+    headerRow.style.display = 'contents';
+    
+    // Empty top-left cell
+    const emptyCell = document.createElement('div');
+    emptyCell.className = 'room-header';
+    emptyCell.textContent = '部屋';
+    headerRow.appendChild(emptyCell);
+    
+    // Day headers
+    for (let i = 0; i < 7; i++) {
+        const date = new Date(currentWeekStart);
+        date.setDate(currentWeekStart.getDate() + i);
+        
+        const dayHeader = document.createElement('div');
+        dayHeader.className = 'day-header';
+        if (isToday(date)) dayHeader.classList.add('today');
+        
+        const dayName = document.createElement('div');
+        dayName.className = 'day-name';
+        dayName.textContent = getDayName(date.getDay());
+        
+        const dayDate = document.createElement('div');
+        dayDate.className = 'day-date';
+        dayDate.textContent = formatDate(date);
+        
+        dayHeader.appendChild(dayName);
+        dayHeader.appendChild(dayDate);
+        headerRow.appendChild(dayHeader);
+    }
+    
+    calendar.appendChild(headerRow);
+    
+    // Create room rows
+    ROOMS.forEach(room => {
+        const roomRow = document.createElement('div');
+        roomRow.style.display = 'contents';
+        
+        // Room name cell
+        const roomCell = document.createElement('div');
+        roomCell.className = 'room-cell';
+        roomCell.textContent = room;
+        roomRow.appendChild(roomCell);
+        
+        // Day cells for this room
+        for (let i = 0; i < 7; i++) {
+            const date = new Date(currentWeekStart);
+            date.setDate(currentWeekStart.getDate() + i);
+            
+            const dayCell = document.createElement('div');
+            dayCell.className = `calendar-cell ${ROOM_COLORS[room]}`;
+            
+            // Add events for this room and date
+            const dayEvents = getEventsForRoomAndDate(room, date);
+            dayEvents.forEach(event => {
+                const eventEl = document.createElement('div');
+                eventEl.className = 'event-item';
+                
+                const timeEl = document.createElement('div');
+                timeEl.className = 'event-time';
+                timeEl.textContent = formatEventTime(event);
+                
+                const titleEl = document.createElement('div');
+                titleEl.className = 'event-title';
+                titleEl.textContent = event.name;
+                
+                eventEl.appendChild(timeEl);
+                eventEl.appendChild(titleEl);
+                dayCell.appendChild(eventEl);
+            });
+            
+            roomRow.appendChild(dayCell);
+        }
+        
+        calendar.appendChild(roomRow);
+    });
+    
+    // Show calendar
+    calendar.style.display = 'grid';
+    const loading = getCachedElement('loading');
+    const noEvents = getCachedElement('noEvents');
+    if (loading) loading.style.display = 'none';
+    if (noEvents) noEvents.style.display = 'none';
+}
+
+// Check if date is today
+function isToday(date) {
+    const today = new Date();
+    return date.toDateString() === today.toDateString();
+}
+
+// Get events for specific room and date
+function getEventsForRoomAndDate(room, date) {
+    return currentEvents.filter(event => {
         const eventDate = new Date(event.start);
-        return eventDate >= now && eventDate <= endDate;
-    });
-};
+        return event.room === room && 
+               eventDate.toDateString() === date.toDateString();
+    }).sort((a, b) => new Date(a.start) - new Date(b.start));
+}
 
-const convertToCalendarEvents = (apiEvents) => {
-    return apiEvents.map(event => {
-        const startDate = new Date(event.start);
-        const endDate = new Date(event.end);
-        
-        return {
-            id: event.id.toString(),
-            calendarId: event.room,
-            title: `${event.name}`,
-            category: 'time',
-            start: startDate,
-            end: endDate,
-            backgroundColor: ROOM_COLORS[event.room] || '#007bff',
-            borderColor: ROOM_COLORS[event.room] || '#007bff',
-            color: '#ffffff'
-        };
-    });
-};
+// Format event time
+function formatEventTime(event) {
+    const start = new Date(event.start);
+    const end = new Date(event.end);
+    return `${formatTime(start)}-${formatTime(end)}`;
+}
 
-const fetchEvents = async () => {
+// Format time as HH:MM
+function formatTime(date) {
+    return date.toLocaleTimeString('ja-JP', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    });
+}
+
+// Navigation functions
+function goToPreviousWeek() {
+    currentWeekStart.setDate(currentWeekStart.getDate() - 7);
+    renderCalendar();
+}
+
+function goToNextWeek() {
+    currentWeekStart.setDate(currentWeekStart.getDate() + 7);
+    renderCalendar();
+}
+
+function goToToday() {
+    currentWeekStart = getWeekStart();
+    renderCalendar();
+}
+
+// Fetch events from API
+async function fetchEvents() {
     try {
+        console.log('[api] GET /api/events');
         const response = await fetch('/api/events');
+        if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
+        }
+        
         const data = await response.json();
+        currentEvents = data.events || [];
+        console.log(`[api] fetched ${currentEvents.length} events`);
         
-        if (!data.events || !Array.isArray(data.events)) {
-            showNoEvents();
-            return;
+        if (currentEvents.length === 0) {
+            const noEvents = getCachedElement('noEvents');
+            const loading = getCachedElement('loading');
+            if (noEvents) noEvents.style.display = 'block';
+            if (loading) loading.style.display = 'none';
+        } else {
+            renderCalendar();
         }
         
-        currentEvents = data.events;
-        const filteredEvents = filterEventsBy30Days(currentEvents);
-        
-        document.getElementById('loading').style.display = 'none';
-        
-        if (filteredEvents.length === 0) {
-            showNoEvents();
-            return;
+        // Update admin panel if visible
+        if (adminMode) {
+            refreshAdminEventsList();
         }
-        
-        document.getElementById('noEvents').style.display = 'none';
-        document.getElementById('calendar').style.display = 'block';
-        
-        const calendarEvents = convertToCalendarEvents(filteredEvents);
-        
-        calendar.clear();
-        calendar.createEvents(calendarEvents);
         
     } catch (error) {
-        console.error('[calendar] Error fetching events:', error);
-        document.getElementById('loading').textContent = 'エラーが発生しました';
+        console.error('[api] Error fetching events:', error);
+        showStatus('データの読み込みに失敗しました', 'error');
+        const loading = getCachedElement('loading');
+        if (loading) loading.style.display = 'none';
     }
-};
+}
 
-const showNoEvents = () => {
-    document.getElementById('calendar').style.display = 'none';
-    document.getElementById('noEvents').style.display = 'block';
-};
-
-const showStatusBadge = (message, type) => {
-    const badge = document.getElementById('statusBadge');
-    badge.textContent = message;
-    badge.className = `status-badge status-${type}`;
-    badge.style.display = 'inline-block';
-    
-    setTimeout(() => {
-        badge.style.display = 'none';
-    }, 5000);
-};
-
-const validateCSVRow = (row) => {
-    const errors = [];
-    
-    const room = row['部屋'] || row['施設'];
-    const name = row['氏名'] || row['予約者'];
-    const start = row['開始'] || row['開始時刻'];
-    const end = row['終了'] || row['終了時刻'];
-    
-    if (!room) errors.push('部屋/施設が未入力');
-    if (!name) errors.push('氏名/予約者が未入力');
-    if (!start) errors.push('開始/開始時刻が未入力');
-    if (!end) errors.push('終了/終了時刻が未入力');
-    
-    if (start && isNaN(Date.parse(start))) {
-        errors.push('開始日時の形式が不正');
+// Delete all events
+async function deleteAllEvents() {
+    try {
+        console.log('[api] DELETE /api/events - clearing all');
+        const response = await fetch('/api/events', {
+            method: 'DELETE'
+        });
+        
+        if (!response.ok) {
+            throw new Error(`DELETE failed: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        console.log('[api] DELETE all events result:', result);
+        return result;
+        
+    } catch (error) {
+        console.error('[api] Error deleting all events:', error);
+        throw error;
     }
-    if (end && isNaN(Date.parse(end))) {
-        errors.push('終了日時の形式が不正');
-    }
-    
-    return {
-        valid: errors.length === 0,
-        errors,
-        data: { room, name, start, end }
-    };
-};
+}
 
-const uploadCSV = async () => {
-    console.log('[csv] uploadCSV function called.');
-    
-    const fileInput = document.getElementById('csvFile');
-    const uploadBtn = document.getElementById('csvUploadBtn');
-    const file = fileInput.files[0];
+// Delete single event
+async function deleteEvent(eventId) {
+    try {
+        console.log(`[admin] delete id=${eventId}`);
+        const response = await fetch(`/api/events/${eventId}`, {
+            method: 'DELETE'
+        });
+        
+        if (!response.ok) {
+            throw new Error(`DELETE failed: ${response.status}`);
+        }
+        
+        console.log(`[admin] delete id=${eventId} → OK`);
+        return true;
+        
+    } catch (error) {
+        console.error(`[admin] Error deleting event ${eventId}:`, error);
+        throw error;
+    }
+}
+
+// CSV Upload function with replace mode
+async function uploadCSV() {
+    const fileInput = getCachedElement('csvFileInput');
+    const uploadBtn = getCachedElement('csvUploadBtn');
+    const file = fileInput ? fileInput.files[0] : null;
     
     if (!file) {
         alert('CSVファイルを選択してください');
         return;
     }
     
-    uploadBtn.disabled = true;
-    uploadBtn.textContent = '読み込み中...';
+    console.log(`[csv] start upload - file: ${file.name}`);
+    
+    if (uploadBtn) {
+        uploadBtn.disabled = true;
+        uploadBtn.textContent = '読み込み中...';
+    }
     
     try {
-        const arrayBuffer = await file.arrayBuffer();
-        const uint8Array = new Uint8Array(arrayBuffer);
+        // Read file
+        const text = await file.text();
         
-        let text;
-        if (typeof Encoding !== 'undefined') {
-            const detectedEncoding = Encoding.detect(uint8Array);
-            
-            if (detectedEncoding === 'SJIS' || detectedEncoding === 'EUCJP') {
-                const unicodeArray = Encoding.convert(uint8Array, {
-                    to: 'UNICODE',
-                    from: detectedEncoding
-                });
-                text = Encoding.codeToString(unicodeArray);
-            } else {
-                text = new TextDecoder('utf-8').decode(arrayBuffer);
-            }
-        } else {
-            text = new TextDecoder('utf-8').decode(arrayBuffer);
-        }
-        
+        // Parse CSV
         if (typeof Papa === 'undefined') {
-            showStatusBadge('PapaParseライブラリが読み込まれていません', 'error');
-            return;
+            throw new Error('PapaParse library not available');
         }
         
         Papa.parse(text, {
             header: true,
             skipEmptyLines: true,
-            complete: async (results) => {
-                const validEvents = [];
-                const errors = [];
-                
-                results.data.forEach((row, index) => {
-                    const validation = validateCSVRow(row);
-                    
-                    if (validation.valid) {
-                        validEvents.push({
-                            id: `csv_${Date.now()}_${index}`,
-                            room: validation.data.room,
-                            name: validation.data.name,
-                            start: new Date(validation.data.start).toISOString(),
-                            end: new Date(validation.data.end).toISOString()
-                        });
-                    } else {
-                        errors.push({
-                            line: index + 2,
-                            errors: validation.errors,
-                            data: row
-                        });
-                    }
-                });
-                
-                if (validEvents.length === 0) {
-                    showStatusBadge('取り込み可能なデータがありません', 'error');
-                    return;
-                }
-                
+            complete: async function(results) {
                 try {
-                    const response = await fetch('/api/logo?bulk=1', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ events: validEvents })
-                    });
+                    console.log(`[csv] parsed ${results.data.length} rows`);
+                    const validEvents = [];
+                    const errorRows = [];
                     
-                    const result = await response.json();
-                    
-                    if (response.ok) {
-                        if (errors.length > 0) {
-                            showStatusBadge(`${result.imported}件取り込み完了 / ${errors.length}件スキップ`, 'warning');
-                        } else {
-                            showStatusBadge(`${result.imported}件取り込み完了`, 'success');
+                    results.data.forEach((row, index) => {
+                        // Enhanced CSV parsing for LogoForm structure
+                        let eventData = null;
+                        
+                        // Try different column mappings
+                        if (row['部屋'] && row['氏名'] && row['開始'] && row['終了']) {
+                            // Simple format
+                            eventData = {
+                                id: `csv_${Date.now()}_${index}`,
+                                room: row['部屋'],
+                                name: row['氏名'],
+                                start: row['開始'],
+                                end: row['終了']
+                            };
+                        } else if (row['5:date'] && (row['7:checkbox'] || row['8:checkbox'] || row['234:checkbox'] || row['235:checkbox'])) {
+                            // LogoForm format - simplified parsing
+                            const name = `${row['244:firstname'] || ''} ${row['244:lastname'] || ''}`.trim() || 
+                                         `${row['91:firstname'] || ''} ${row['91:lastname'] || ''}`.trim() || 
+                                         '予約者';
+                            
+                            // Find active room and time
+                            let room = '';
+                            let timeData = '';
+                            
+                            if (row['7:checkbox']) {
+                                room = '会議室(さくら)';
+                                timeData = row['7:checkbox'];
+                            } else if (row['8:checkbox']) {
+                                room = '相談室(スミレ・コスモス)';
+                                timeData = row['8:checkbox'];
+                            } else if (row['234:checkbox']) {
+                                room = 'テレワークルームA';
+                                timeData = row['234:checkbox'];
+                            } else if (row['235:checkbox']) {
+                                room = 'テレワークルームB';
+                                timeData = row['235:checkbox'];
+                            }
+                            
+                            if (room && timeData && timeData.includes('～')) {
+                                const [startTime, endTime] = timeData.split('～');
+                                const dateStr = row['5:date'];
+                                
+                                eventData = {
+                                    id: `csv_${Date.now()}_${index}`,
+                                    room: room,
+                                    name: name,
+                                    start: `${dateStr}T${startTime.trim()}:00`,
+                                    end: `${dateStr}T${endTime.trim()}:00`
+                                };
+                            }
                         }
                         
-                        await fetchEvents();
-                        fileInput.value = '';
-                    } else {
-                        if (response.status === 422) {
-                            showStatusBadge('CSVエラー: 詳細はコンソール', 'error');
+                        if (eventData) {
+                            validEvents.push(eventData);
                         } else {
-                            showStatusBadge('サーバエラーが発生しました', 'error');
+                            errorRows.push(index + 1);
                         }
+                    });
+                    
+                    console.log(`[csv] valid events: ${validEvents.length}, errors: ${errorRows.length}`);
+                    
+                    if (validEvents.length > 0) {
+                        // Delete all existing events first
+                        await deleteAllEvents();
+                        console.log('[csv] DELETE all → status 200');
+                        
+                        // Upload new events with replace mode
+                        const response = await fetch('/api/logo?bulk=1&replace=1', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ events: validEvents })
+                        });
+                        
+                        if (response.ok) {
+                            console.log(`[csv] bulk upload success - imported:${validEvents.length}`);
+                            
+                            let message = `${validEvents.length}件を取り込み、旧データを上書きしました`;
+                            let statusType = 'success';
+                            
+                            if (errorRows.length > 0) {
+                                message += ` (${errorRows.length}件スキップ)`;
+                                statusType = 'warning';
+                            }
+                            
+                            showStatus(message, statusType);
+                            
+                            // Refresh calendar and admin panel
+                            await fetchEvents();
+                            
+                        } else {
+                            throw new Error('Bulk upload failed');
+                        }
+                    } else {
+                        showStatus('有効なデータが見つかりませんでした', 'error');
                     }
                     
-                } catch (fetchError) {
-                    console.error('[csv] Network error:', fetchError);
-                    showStatusBadge('サーバとの通信エラーが発生しました', 'error');
+                } catch (error) {
+                    console.error('[csv] processing error:', error);
+                    showStatus('CSV処理でエラーが発生しました', 'error');
                 }
-            },
-            error: (parseError) => {
-                console.error('[csv] Parse error:', parseError);
-                showStatusBadge('CSVファイルの解析に失敗しました', 'error');
             }
         });
         
-    } catch (readError) {
-        console.error('[csv] File read error:', readError);
-        showStatusBadge('ファイルの読み込みに失敗しました', 'error');
+    } catch (error) {
+        console.error('[csv] file read error:', error);
+        showStatus('ファイルの読み込みに失敗しました', 'error');
     } finally {
-        uploadBtn.disabled = false;
-        uploadBtn.textContent = '📄 CSV 取り込み';
-    }
-};
-
-const toggleAdminMode = () => {
-    console.log('[admin] toggleAdminMode function called.');
-    
-    const adminPanel = document.getElementById('adminPanel');
-    const adminToggle = document.getElementById('adminToggle');
-    
-    adminMode = !adminMode;
-    adminPanel.style.display = adminMode ? 'block' : 'none';
-    adminToggle.textContent = adminMode ? '📅 カレンダー' : '🔧 管理モード';
-    adminToggle.classList.toggle('active', adminMode);
-    
-    if (adminMode) {
-        refreshEventsList();
-    }
-};
-
-const refreshEventsList = async () => {
-    const eventsList = document.getElementById('eventsList');
-    eventsList.innerHTML = '<p>読み込み中...</p>';
-    
-    try {
-        const response = await fetch('/api/events');
-        const data = await response.json();
-        
-        if (!data.events || data.events.length === 0) {
-            eventsList.innerHTML = '<p>イベントがありません</p>';
-            return;
+        if (uploadBtn) {
+            uploadBtn.disabled = false;
+            uploadBtn.textContent = '📄 CSV 取り込み';
         }
-        
-        const sortedEvents = data.events.sort((a, b) => new Date(a.start) - new Date(b.start));
-        
-        eventsList.innerHTML = sortedEvents.map(event => {
-            const startTime = new Date(event.start).toLocaleString('ja-JP');
-            const endTime = new Date(event.end).toLocaleString('ja-JP');
-            
-            return `
-                <div class="event-item-admin">
-                    <div class="event-info">
-                        <div><strong>${event.name}</strong> @ ${event.room}</div>
-                        <div class="event-meta">ID: ${event.id} | ${startTime} ～ ${endTime}</div>
-                    </div>
-                    <button class="delete-btn" onclick="deleteEvent('${event.id}')">🗑️ 削除</button>
-                </div>
-            `;
-        }).join('');
-        
-    } catch (listError) {
-        console.error('[admin] Error loading events:', listError);
-        eventsList.innerHTML = '<p>エラーが発生しました</p>';
+        if (fileInput) {
+            fileInput.value = '';
+        }
     }
-};
+}
 
-const deleteEvent = async (eventId) => {
-    if (!confirm(`イベント ID: ${eventId} を削除しますか？`)) {
+// Admin panel functions
+function toggleAdminMode() {
+    adminMode = !adminMode;
+    const adminPanel = getCachedElement('adminPanel');
+    const adminToggle = getCachedElement('adminToggle');
+    
+    if (adminPanel && adminToggle) {
+        adminPanel.style.display = adminMode ? 'block' : 'none';
+        adminToggle.textContent = adminMode ? '📅 カレンダーへ' : '🔧 管理モード';
+        
+        if (adminMode) {
+            refreshAdminEventsList();
+        }
+    }
+}
+
+function refreshAdminEventsList() {
+    const eventsTable = getCachedElement('eventsTable');
+    if (!eventsTable) return;
+    
+    if (currentEvents.length === 0) {
+        eventsTable.innerHTML = '<p>イベントがありません</p>';
         return;
     }
     
-    try {
-        const response = await fetch(`/api/events/${eventId}`, {
-            method: 'DELETE'
-        });
-        
-        const result = await response.json();
-        
-        if (response.ok) {
-            showStatusBadge(`イベントを削除しました (残り: ${result.remainingCount}件)`, 'success');
+    // Sort events by start time
+    const sortedEvents = [...currentEvents].sort((a, b) => new Date(a.start) - new Date(b.start));
+    
+    const table = document.createElement('table');
+    table.innerHTML = `
+        <thead>
+            <tr>
+                <th>開始日時</th>
+                <th>部屋</th>
+                <th>予約者</th>
+                <th>時間</th>
+                <th>操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${sortedEvents.map(event => {
+                const startDate = new Date(event.start);
+                const endDate = new Date(event.end);
+                
+                return `
+                    <tr class="event-row" data-event-id="${event.id}">
+                        <td>${startDate.toLocaleDateString('ja-JP')} ${formatTime(startDate)}</td>
+                        <td>${event.room}</td>
+                        <td>${event.name}</td>
+                        <td>${formatTime(startDate)}-${formatTime(endDate)}</td>
+                        <td>
+                            <button class="btn btn-danger delete-event-btn" data-event-id="${event.id}">
+                                🗑️ 削除
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('')}
+        </tbody>
+    `;
+    
+    eventsTable.innerHTML = '';
+    eventsTable.appendChild(table);
+    
+    // Add delete button event listeners
+    const deleteButtons = eventsTable.querySelectorAll('.delete-event-btn');
+    deleteButtons.forEach(button => {
+        button.addEventListener('click', async (e) => {
+            const eventId = e.target.dataset.eventId;
+            const row = e.target.closest('.event-row');
             
-            refreshEventsList();
-            fetchEvents();
-        } else {
-            showStatusBadge(`削除に失敗しました: ${result.error}`, 'error');
-        }
-        
-    } catch (deleteError) {
-        console.error('[admin] Delete error:', deleteError);
-        showStatusBadge('削除中にエラーが発生しました', 'error');
-    }
-};
+            if (confirm('このイベントを削除しますか？')) {
+                try {
+                    // Add deleting class for visual feedback
+                    row.classList.add('deleting');
+                    
+                    await deleteEvent(eventId);
+                    
+                    // Fade out animation
+                    row.classList.add('fade-out');
+                    setTimeout(() => {
+                        // Refresh data and re-render
+                        fetchEvents();
+                    }, 300);
+                    
+                } catch (error) {
+                    row.classList.remove('deleting');
+                    showStatus('削除に失敗しました', 'error');
+                }
+            }
+        });
+    });
+}
+
+// Event listeners
+document.addEventListener('DOMContentLoaded', () => {
+    // Navigation buttons
+    const prevWeekBtn = getCachedElement('prevWeekBtn');
+    const nextWeekBtn = getCachedElement('nextWeekBtn');
+    const todayBtn = getCachedElement('todayBtn');
+    
+    if (prevWeekBtn) prevWeekBtn.addEventListener('click', goToPreviousWeek);
+    if (nextWeekBtn) nextWeekBtn.addEventListener('click', goToNextWeek);
+    if (todayBtn) todayBtn.addEventListener('click', goToToday);
+    
+    // CSV Upload button
+    const csvUploadBtn = getCachedElement('csvUploadBtn');
+    if (csvUploadBtn) csvUploadBtn.addEventListener('click', uploadCSV);
+    
+    // Admin toggle
+    const adminToggle = getCachedElement('adminToggle');
+    if (adminToggle) adminToggle.addEventListener('click', toggleAdminMode);
+    
+    // Refresh button
+    const refreshBtn = getCachedElement('refreshBtn');
+    if (refreshBtn) refreshBtn.addEventListener('click', fetchEvents);
+    
+    // Initialize calendar
+    fetchEvents();
+});

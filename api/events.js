@@ -1,10 +1,17 @@
 import { kv } from '@vercel/kv';
 
 export default async function handler(req, res) {
-  console.log('[kv] GET request received');
+  console.log(`[events] ${req.method} request received`);
   
   // CORS許可ヘッダを設定
   res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  
+  // プリフライトリクエスト対応
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
   
   // 環境変数チェック
   const urlSet = !!process.env.KV_REST_API_URL;
@@ -19,9 +26,59 @@ export default async function handler(req, res) {
     });
   }
   
-  // GETメソッドのみ許可
+  // DELETE endpoint for clearing all events or single event
+  if (req.method === 'DELETE') {
+    console.log('[events] DELETE request - clearing all events');
+    
+    // Check if this is a single event delete (has event ID in URL)
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const pathParts = url.pathname.split('/');
+    const eventId = pathParts[pathParts.length - 1];
+    
+    if (eventId && eventId !== 'events') {
+      // Single event delete
+      try {
+        const events = await kv.get('events') || [];
+        const filteredEvents = events.filter(event => event.id !== eventId);
+        
+        if (filteredEvents.length === events.length) {
+          return res.status(404).json({ error: 'Event not found' });
+        }
+        
+        await kv.set('events', filteredEvents);
+        console.log(`[events] Deleted event ${eventId}, remaining: ${filteredEvents.length}`);
+        
+        return res.status(200).json({ 
+          deleted: true, 
+          eventId: eventId,
+          remaining: filteredEvents.length 
+        });
+        
+      } catch (error) {
+        console.error('[events] Single delete error:', error);
+        return res.status(500).json({ error: error.message });
+      }
+    } else {
+      // Clear all events
+      try {
+        await kv.set('events', []);
+        console.log('[events] All events cleared');
+        
+        return res.status(200).json({ 
+          cleared: true,
+          message: 'All events deleted successfully'
+        });
+        
+      } catch (error) {
+        console.error('[events] Clear all error:', error);
+        return res.status(500).json({ error: error.message });
+      }
+    }
+  }
+
+  // GETメソッドのみ許可（その他）
   if (req.method !== 'GET') {
-    console.log('[kv] Method not allowed:', req.method);
+    console.log('[events] Method not allowed:', req.method);
     return res.status(405).json({ error: 'Method not allowed' });
   }
 

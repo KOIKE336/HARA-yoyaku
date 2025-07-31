@@ -87,6 +87,17 @@
             background: #138496;
         }
         
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+            font-size: 12px;
+            padding: 6px 10px;
+        }
+        
+        .btn-danger:hover {
+            background: #c82333;
+        }
+        
         .btn:disabled {
             background: #6c757d;
             cursor: not-allowed;
@@ -110,6 +121,12 @@
             background: #f8d7da;
             color: #721c24;
             border: 1px solid #f5c6cb;
+        }
+        
+        .status-warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
         }
         
         .calendar-navigation {
@@ -271,10 +288,46 @@
             color: #495057;
         }
         
-        .events-list {
-            max-height: 300px;
+        .events-table {
+            max-height: 400px;
             overflow-y: auto;
-            margin-bottom: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .events-table table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        
+        .events-table th,
+        .events-table td {
+            padding: 8px 12px;
+            text-align: left;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .events-table th {
+            background: #e9ecef;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+        }
+        
+        .events-table tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .event-row {
+            transition: opacity 0.3s ease;
+        }
+        
+        .event-row.deleting {
+            opacity: 0.5;
+        }
+        
+        .event-row.fade-out {
+            opacity: 0;
         }
         
         #statusMessage {
@@ -322,7 +375,7 @@
     
     <div id="adminPanel" class="admin-panel">
         <h3>📋 イベント管理</h3>
-        <div id="eventsList" class="events-list">
+        <div id="eventsTable" class="events-table">
             <p>読み込み中...</p>
         </div>
         <button id="refreshBtn" class="btn btn-primary">🔄 更新</button>
