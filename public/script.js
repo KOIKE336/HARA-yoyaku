@@ -1,17 +1,72 @@
+// Emergency Admin Mode Handler (called directly from HTML)
+window.toggleAdminModeHandler = function() {
+    console.log('EMERGENCY: toggleAdminModeHandler called directly from HTML');
+    
+    const adminPanel = document.getElementById('adminPanel');
+    const adminToggle = document.getElementById('adminToggle');
+    
+    if (!adminPanel || !adminToggle) {
+        console.error('EMERGENCY: Required elements not found');
+        console.log('adminPanel:', adminPanel);
+        console.log('adminToggle:', adminToggle);
+        return;
+    }
+    
+    const isCurrentlyVisible = adminPanel.style.display === 'block';
+    
+    if (isCurrentlyVisible) {
+        // Hide admin panel
+        adminPanel.style.display = 'none';
+        adminToggle.textContent = '🔧 管理モード';
+        console.log('EMERGENCY: Admin panel hidden');
+        
+        // Show calendar
+        const calendarNav = document.querySelector('.calendar-navigation');
+        const calendarContainer = document.querySelector('.calendar-container');
+        if (calendarNav) calendarNav.style.display = 'flex';
+        if (calendarContainer) calendarContainer.style.display = 'block';
+    } else {
+        // Show admin panel
+        adminPanel.style.display = 'block';
+        adminToggle.textContent = '📅 カレンダーへ';
+        console.log('EMERGENCY: Admin panel shown');
+        
+        // Hide calendar
+        const calendarNav = document.querySelector('.calendar-navigation');
+        const calendarContainer = document.querySelector('.calendar-container');
+        if (calendarNav) calendarNav.style.display = 'none';
+        if (calendarContainer) calendarContainer.style.display = 'none';
+        
+        // Create simple table manually
+        const eventsTable = document.getElementById('eventsTable');
+        if (eventsTable) {
+            eventsTable.innerHTML = `
+                <div style="padding: 20px; background: white; border: 1px solid #ddd; border-radius: 5px;">
+                    <h4>管理機能テスト</h4>
+                    <p>この管理パネルが表示されれば、基本機能は動作しています。</p>
+                    <button onclick="alert('削除ボタンテスト成功!')" style="background: #dc3545; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">
+                        🗑️ テスト削除ボタン
+                    </button>
+                </div>
+            `;
+        }
+    }
+};
+
 // Grid Calendar Implementation
 const ROOMS = ['会議室(さくら)', '相談室(スミレ・コスモス)', 'テレワークルームA', 'テレワークルームB'];
 const ROOM_COLORS = {
     '会議室(さくら)': 'room-sakura',
-    '相談室(スミレ・コスモス)': 'room-violet', 
+    '相談室(スミレ・コスモス)': 'room-violet',
     'テレワークルームA': 'room-telework-a',
     'テレワークルームB': 'room-telework-b'
 };
 
 let currentWeekStart = new Date();
-let currentEvents = [];
+let currentEvents = []; // This will hold the events fetched from the API
 let adminMode = false;
 
-// DOM element cache
+// DOM element cache for performance
 const domCache = {};
 
 function getCachedElement(id) {
@@ -21,15 +76,15 @@ function getCachedElement(id) {
     return domCache[id];
 }
 
-// Get Monday of current week
+// Get Monday of current week (adjusts to Sunday if week starts on Sunday)
 function getWeekStart(date = new Date()) {
     const d = new Date(date);
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+    const day = d.getDay(); // 0 for Sunday, 1 for Monday, etc.
+    const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Adjust to Monday
     return new Date(d.setDate(diff));
 }
 
-// Format date for display
+// Format date for display (e.g., 7/30)
 function formatDate(date) {
     return date.toLocaleDateString('ja-JP', {
         month: 'numeric',
@@ -37,166 +92,148 @@ function formatDate(date) {
     });
 }
 
-// Format week range
+// Format week range (e.g., 2025年7月28日 - 8月3日)
 function formatWeekRange(start) {
     const end = new Date(start);
     end.setDate(start.getDate() + 6);
-    
-    return `${start.getFullYear()}年${start.getMonth() + 1}月${start.getDate()}日 - ${end.getMonth() + 1}月${end.getDate()}日`;
+
+    const startFormatter = new Intl.DateTimeFormat('ja-JP', { year: 'numeric', month: 'numeric', day: 'numeric' });
+    const endFormatter = new Intl.DateTimeFormat('ja-JP', { month: 'numeric', day: 'numeric' });
+
+    return `${startFormatter.format(start)} - ${endFormatter.format(end)}`;
 }
 
-// Get day name in Japanese
+// Get day name in Japanese (日, 月, 火, ...)
 function getDayName(dayIndex) {
     const days = ['日', '月', '火', '水', '木', '金', '土'];
     return days[dayIndex];
 }
 
-// Initialize current week to Monday of this week
-currentWeekStart = getWeekStart();
-
-// Status message helper
-function showStatus(message, type) {
-    const badge = getCachedElement('statusBadge');
-    if (badge) {
-        badge.textContent = message;
-        badge.className = `status-badge status-${type}`;
-        badge.style.display = 'inline-block';
-        
-        setTimeout(() => {
-            badge.style.display = 'none';
-        }, 5000);
-    }
-    console.log(`[status] ${type.toUpperCase()}: ${message}`);
-}
-
-// Render calendar grid
-function renderCalendar() {
-    const calendar = getCachedElement('calendar');
-    const weekInfo = getCachedElement('weekInfo');
-    
-    if (!calendar || !weekInfo) return;
-    
-    // Update week info
-    weekInfo.textContent = formatWeekRange(currentWeekStart);
-    
-    // Clear calendar
-    calendar.innerHTML = '';
-    
-    // Create header row
-    const headerRow = document.createElement('div');
-    headerRow.style.display = 'contents';
-    
-    // Empty top-left cell
-    const emptyCell = document.createElement('div');
-    emptyCell.className = 'room-header';
-    emptyCell.textContent = '部屋';
-    headerRow.appendChild(emptyCell);
-    
-    // Day headers
-    for (let i = 0; i < 7; i++) {
-        const date = new Date(currentWeekStart);
-        date.setDate(currentWeekStart.getDate() + i);
-        
-        const dayHeader = document.createElement('div');
-        dayHeader.className = 'day-header';
-        if (isToday(date)) dayHeader.classList.add('today');
-        
-        const dayName = document.createElement('div');
-        dayName.className = 'day-name';
-        dayName.textContent = getDayName(date.getDay());
-        
-        const dayDate = document.createElement('div');
-        dayDate.className = 'day-date';
-        dayDate.textContent = formatDate(date);
-        
-        dayHeader.appendChild(dayName);
-        dayHeader.appendChild(dayDate);
-        headerRow.appendChild(dayHeader);
-    }
-    
-    calendar.appendChild(headerRow);
-    
-    // Create room rows
-    ROOMS.forEach(room => {
-        const roomRow = document.createElement('div');
-        roomRow.style.display = 'contents';
-        
-        // Room name cell
-        const roomCell = document.createElement('div');
-        roomCell.className = 'room-cell';
-        roomCell.textContent = room;
-        roomRow.appendChild(roomCell);
-        
-        // Day cells for this room
-        for (let i = 0; i < 7; i++) {
-            const date = new Date(currentWeekStart);
-            date.setDate(currentWeekStart.getDate() + i);
-            
-            const dayCell = document.createElement('div');
-            dayCell.className = `calendar-cell ${ROOM_COLORS[room]}`;
-            
-            // Add events for this room and date
-            const dayEvents = getEventsForRoomAndDate(room, date);
-            dayEvents.forEach(event => {
-                const eventEl = document.createElement('div');
-                eventEl.className = 'event-item';
-                
-                const timeEl = document.createElement('div');
-                timeEl.className = 'event-time';
-                timeEl.textContent = formatEventTime(event);
-                
-                const titleEl = document.createElement('div');
-                titleEl.className = 'event-title';
-                titleEl.textContent = event.name;
-                
-                eventEl.appendChild(timeEl);
-                eventEl.appendChild(titleEl);
-                dayCell.appendChild(eventEl);
-            });
-            
-            roomRow.appendChild(dayCell);
-        }
-        
-        calendar.appendChild(roomRow);
-    });
-    
-    // Show calendar
-    calendar.style.display = 'grid';
-    const loading = getCachedElement('loading');
-    const noEvents = getCachedElement('noEvents');
-    if (loading) loading.style.display = 'none';
-    if (noEvents) noEvents.style.display = 'none';
-}
-
-// Check if date is today
+// Check if a given date is today
 function isToday(date) {
     const today = new Date();
     return date.toDateString() === today.toDateString();
 }
 
-// Get events for specific room and date
-function getEventsForRoomAndDate(room, date) {
-    return currentEvents.filter(event => {
-        const eventDate = new Date(event.start);
-        return event.room === room && 
-               eventDate.toDateString() === date.toDateString();
-    }).sort((a, b) => new Date(a.start) - new Date(b.start));
-}
-
-// Format event time
-function formatEventTime(event) {
-    const start = new Date(event.start);
-    const end = new Date(event.end);
-    return `${formatTime(start)}-${formatTime(end)}`;
-}
-
-// Format time as HH:MM
+// Format time as HH:MM (e.g., 09:30)
 function formatTime(date) {
     return date.toLocaleTimeString('ja-JP', {
         hour: '2-digit',
         minute: '2-digit',
         hour12: false
     });
+}
+
+// Format event time for display (e.g., 09:30-10:00)
+function formatEventDisplayTime(startIso, endIso) {
+    const start = new Date(startIso);
+    const end = new Date(endIso);
+    return `${formatTime(start)}〜${formatTime(end)}`;
+}
+
+// Render the calendar grid
+function renderCalendar() {
+    const calendar = getCachedElement('calendar');
+    const weekInfo = getCachedElement('weekInfo');
+    const loading = getCachedElement('loading');
+    const noEvents = getCachedElement('noEvents');
+
+    if (!calendar || !weekInfo || !loading || !noEvents) {
+        console.error('Missing essential calendar DOM elements.');
+        return;
+    }
+
+    weekInfo.textContent = formatWeekRange(currentWeekStart);
+    calendar.innerHTML = ''; // Clear calendar content
+
+    // Create header row
+    const headerRow = document.createElement('div');
+    headerRow.className = 'calendar-grid-header'; // Use a class for grid header
+    headerRow.style.display = 'contents'; // Allows children to be direct grid items
+
+    // Empty top-left cell for room header
+    const emptyCell = document.createElement('div');
+    emptyCell.className = 'room-header'; // Specific class for room header cell
+    emptyCell.textContent = '部屋';
+    headerRow.appendChild(emptyCell);
+
+    // Day headers (横軸)
+    for (let i = 0; i < 7; i++) {
+        const date = new Date(currentWeekStart);
+        date.setDate(currentWeekStart.getDate() + i);
+
+        const dayHeader = document.createElement('div');
+        dayHeader.className = 'day-header'; // Specific class for day header cell
+        if (isToday(date)) dayHeader.classList.add('today');
+
+        const dayName = document.createElement('div');
+        dayName.className = 'day-name';
+        dayName.textContent = getDayName(date.getDay());
+
+        const dayDate = document.createElement('div');
+        dayDate.className = 'day-date';
+        dayDate.textContent = formatDate(date);
+
+        dayHeader.appendChild(dayName);
+        dayHeader.appendChild(dayDate);
+        headerRow.appendChild(dayHeader);
+    }
+    calendar.appendChild(headerRow);
+
+    // Create room rows (縦軸)
+    ROOMS.forEach(room => {
+        const roomRow = document.createElement('div');
+        roomRow.className = 'calendar-grid-row'; // Use a class for grid row
+        roomRow.style.display = 'contents'; // Allows children to be direct grid items
+
+        // Room name cell
+        const roomCell = document.createElement('div');
+        roomCell.className = 'room-cell'; // Specific class for room name cell
+        roomCell.textContent = room;
+        roomRow.appendChild(roomCell);
+
+        // Day cells for this room
+        for (let i = 0; i < 7; i++) {
+            const date = new Date(currentWeekStart);
+            date.setDate(currentWeekStart.getDate() + i);
+
+            const dayCell = document.createElement('div');
+            dayCell.className = `calendar-cell ${ROOM_COLORS[room]}`;
+
+            // Add events for this room and date
+            const dayEvents = currentEvents.filter(event => {
+                const eventStartDate = new Date(event.start);
+                // Compare only date part, ignore time
+                return event.room === room &&
+                       eventStartDate.toDateString() === date.toDateString();
+            }).sort((a, b) => new Date(a.start) - new Date(b.start)); // Sort by start time
+
+            dayEvents.forEach(event => {
+                const eventEl = document.createElement('div');
+                eventEl.className = 'event-item';
+
+                // Display Name and Time
+                const nameEl = document.createElement('div');
+                nameEl.className = 'event-title';
+                nameEl.textContent = event.name; // event.name should be "名 姓" or "氏名"
+
+                const timeEl = document.createElement('div');
+                timeEl.className = 'event-time';
+                timeEl.textContent = formatEventDisplayTime(event.start, event.end);
+
+                eventEl.appendChild(timeEl);
+                eventEl.appendChild(nameEl);
+                dayCell.appendChild(eventEl);
+            });
+            roomRow.appendChild(dayCell);
+        }
+        calendar.appendChild(roomRow);
+    });
+
+    // Show calendar and hide loading/no events messages
+    calendar.style.display = 'grid'; // Ensure grid display
+    loading.style.display = 'none';
+    noEvents.style.display = 'none';
 }
 
 // Navigation functions
@@ -215,38 +252,37 @@ function goToToday() {
     renderCalendar();
 }
 
-// Fetch events from API
+// Fetch events from API and update currentEvents
 async function fetchEvents() {
+    showStatus('カレンダーデータを読み込み中...', 'info');
     try {
-        console.log('[api] GET /api/events');
         const response = await fetch('/api/events');
         if (!response.ok) {
-            throw new Error(`API error: ${response.status}`);
+            const errorData = await response.json();
+            throw new Error(errorData.error || `API error: ${response.status}`);
         }
-        
         const data = await response.json();
-        currentEvents = data.events || [];
-        console.log(`[api] fetched ${currentEvents.length} events`);
-        
+        currentEvents = data.events || []; // Update global events array
+
         if (currentEvents.length === 0) {
-            const noEvents = getCachedElement('noEvents');
-            const loading = getCachedElement('loading');
-            if (noEvents) noEvents.style.display = 'block';
-            if (loading) loading.style.display = 'none';
+            showStatus('イベントデータがありません。', 'warning');
+            getCachedElement('noEvents').style.display = 'block';
+            getCachedElement('loading').style.display = 'none';
+            getCachedElement('calendar').style.display = 'none'; // Hide calendar if no events
         } else {
-            renderCalendar();
+            renderCalendar(); // Re-render calendar with new events
+            showStatus('データを正常に読み込みました。', 'success');
         }
-        
+
         // Update admin panel if visible
         if (adminMode) {
-            refreshAdminEventsList();
+            setTimeout(() => refreshAdminEventsList(), 100);
         }
-        
     } catch (error) {
-        console.error('[api] Error fetching events:', error);
-        showStatus('データの読み込みに失敗しました', 'error');
-        const loading = getCachedElement('loading');
-        if (loading) loading.style.display = 'none';
+        console.error('Error fetching events:', error);
+        showStatus(`データの読み込みに失敗しました: ${error.message}`, 'error');
+        getCachedElement('loading').style.display = 'none';
+        getCachedElement('calendar').style.display = 'none'; // Hide calendar on error
     }
 }
 
@@ -449,120 +485,291 @@ async function uploadCSV() {
 // Admin panel functions
 function toggleAdminMode() {
     adminMode = !adminMode;
-    const adminPanel = getCachedElement('adminPanel');
-    const adminToggle = getCachedElement('adminToggle');
+    console.log('toggleAdminMode called, new adminMode:', adminMode);
     
-    if (adminPanel && adminToggle) {
-        adminPanel.style.display = adminMode ? 'block' : 'none';
-        adminToggle.textContent = adminMode ? '📅 カレンダーへ' : '🔧 管理モード';
+    const adminPanel = document.getElementById('adminPanel');
+    const adminToggle = document.getElementById('adminToggle');
+    
+    console.log('adminPanel element:', adminPanel);
+    console.log('adminToggle element:', adminToggle);
+    
+    if (!adminPanel) {
+        console.error('adminPanel element not found!');
+        return;
+    }
+    
+    if (!adminToggle) {
+        console.error('adminToggle element not found!');
+        return;
+    }
+    
+    if (adminMode) {
+        // Show admin panel
+        adminPanel.style.display = 'block';
+        adminToggle.textContent = '📅 カレンダーへ';
+        console.log('Admin panel shown');
         
-        if (adminMode) {
+        // Hide calendar navigation and calendar container
+        const calendarNav = document.querySelector('.calendar-navigation');
+        const calendarContainer = document.querySelector('.calendar-container');
+        if (calendarNav) calendarNav.style.display = 'none';
+        if (calendarContainer) calendarContainer.style.display = 'none';
+        
+        // Refresh admin events list
+        setTimeout(() => {
             refreshAdminEventsList();
-        }
+        }, 200);
+    } else {
+        // Hide admin panel
+        adminPanel.style.display = 'none';
+        adminToggle.textContent = '🔧 管理モード';
+        console.log('Admin panel hidden');
+        
+        // Show calendar navigation and calendar container
+        const calendarNav = document.querySelector('.calendar-navigation');
+        const calendarContainer = document.querySelector('.calendar-container');
+        if (calendarNav) calendarNav.style.display = 'flex';
+        if (calendarContainer) calendarContainer.style.display = 'block';
     }
 }
 
 function refreshAdminEventsList() {
-    const eventsTable = getCachedElement('eventsTable');
-    if (!eventsTable) return;
+    console.log('[ADMIN] refreshAdminEventsList START - events count:', currentEvents.length);
+    console.log('[ADMIN] currentEvents data:', currentEvents);
+    
+    const eventsTable = document.getElementById('eventsTable');
+    if (!eventsTable) {
+        console.error('[ADMIN] eventsTable element not found');
+        return;
+    }
+    
+    console.log('[ADMIN] eventsTable element found:', eventsTable);
+    
+    // Clear existing content
+    eventsTable.innerHTML = '';
     
     if (currentEvents.length === 0) {
-        eventsTable.innerHTML = '<p>イベントがありません</p>';
+        console.log('[ADMIN] No events, showing empty message');
+        eventsTable.innerHTML = '<p style="text-align: center; padding: 20px; color: #666; font-size: 16px;">イベントがありません</p>';
         return;
     }
     
     // Sort events by start time
     const sortedEvents = [...currentEvents].sort((a, b) => new Date(a.start) - new Date(b.start));
+    console.log('[ADMIN] Sorted events:', sortedEvents.length);
     
-    const table = document.createElement('table');
-    table.innerHTML = `
-        <thead>
-            <tr>
-                <th>開始日時</th>
-                <th>部屋</th>
-                <th>予約者</th>
-                <th>時間</th>
-                <th>操作</th>
-            </tr>
-        </thead>
-        <tbody>
-            ${sortedEvents.map(event => {
-                const startDate = new Date(event.start);
-                const endDate = new Date(event.end);
-                
-                return `
-                    <tr class="event-row" data-event-id="${event.id}">
-                        <td>${startDate.toLocaleDateString('ja-JP')} ${formatTime(startDate)}</td>
-                        <td>${event.room}</td>
-                        <td>${event.name}</td>
-                        <td>${formatTime(startDate)}-${formatTime(endDate)}</td>
-                        <td>
-                            <button class="btn btn-danger delete-event-btn" data-event-id="${event.id}">
-                                🗑️ 削除
-                            </button>
-                        </td>
-                    </tr>
-                `;
-            }).join('')}
-        </tbody>
+    // Create each row manually to ensure button generation
+    let tableContent = `
+        <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+            <thead>
+                <tr style="background-color: #f8f9fa;">
+                    <th style="padding: 12px; border: 1px solid #dee2e6; text-align: left; font-weight: bold;">開始日時</th>
+                    <th style="padding: 12px; border: 1px solid #dee2e6; text-align: left; font-weight: bold;">部屋</th>
+                    <th style="padding: 12px; border: 1px solid #dee2e6; text-align: left; font-weight: bold;">予約者</th>
+                    <th style="padding: 12px; border: 1px solid #dee2e6; text-align: left; font-weight: bold;">時間</th>
+                    <th style="padding: 12px; border: 1px solid #dee2e6; text-align: left; font-weight: bold;">操作</th>
+                </tr>
+            </thead>
+            <tbody>
     `;
     
-    eventsTable.innerHTML = '';
-    eventsTable.appendChild(table);
-    
-    // Add delete button event listeners
-    const deleteButtons = eventsTable.querySelectorAll('.delete-event-btn');
-    deleteButtons.forEach(button => {
-        button.addEventListener('click', async (e) => {
-            const eventId = e.target.dataset.eventId;
-            const row = e.target.closest('.event-row');
-            
-            if (confirm('このイベントを削除しますか？')) {
-                try {
-                    // Add deleting class for visual feedback
-                    row.classList.add('deleting');
-                    
-                    await deleteEvent(eventId);
-                    
-                    // Fade out animation
-                    row.classList.add('fade-out');
-                    setTimeout(() => {
-                        // Refresh data and re-render
-                        fetchEvents();
-                    }, 300);
-                    
-                } catch (error) {
-                    row.classList.remove('deleting');
-                    showStatus('削除に失敗しました', 'error');
-                }
-            }
-        });
+    sortedEvents.forEach((event, index) => {
+        const startDate = new Date(event.start);
+        const endDate = new Date(event.end);
+        
+        console.log(`[ADMIN] Processing event ${index + 1}:`, event.id, event.name);
+        
+        tableContent += `
+            <tr class="admin-event-row" data-event-id="${event.id}" style="border-bottom: 1px solid #dee2e6;">
+                <td style="padding: 8px; border: 1px solid #dee2e6;">${startDate.toLocaleDateString('ja-JP')} ${formatTime(startDate)}</td>
+                <td style="padding: 8px; border: 1px solid #dee2e6;">${event.room}</td>
+                <td style="padding: 8px; border: 1px solid #dee2e6;">${event.name}</td>
+                <td style="padding: 8px; border: 1px solid #dee2e6;">${formatTime(startDate)}-${formatTime(endDate)}</td>
+                <td style="padding: 8px; border: 1px solid #dee2e6;">
+                    <button 
+                        class="admin-delete-btn" 
+                        data-event-id="${event.id}" 
+                        onclick="handleAdminDelete('${event.id}')"
+                        style="
+                            background-color: #dc3545 !important; 
+                            color: white !important; 
+                            border: none !important; 
+                            padding: 6px 12px !important; 
+                            border-radius: 4px !important; 
+                            cursor: pointer !important; 
+                            font-size: 12px !important;
+                            font-weight: bold !important;
+                            min-width: 60px !important;
+                            display: inline-block !important;
+                        ">
+                        🗑️ 削除
+                    </button>
+                </td>
+            </tr>
+        `;
     });
+    
+    tableContent += `
+            </tbody>
+        </table>
+    `;
+    
+    console.log('[ADMIN] Setting table HTML...');
+    eventsTable.innerHTML = tableContent;
+    
+    // Double check buttons are in DOM
+    setTimeout(() => {
+        const adminDeleteBtns = eventsTable.querySelectorAll('.admin-delete-btn');
+        console.log('[ADMIN] DELETE BUTTONS FOUND:', adminDeleteBtns.length);
+        
+        if (adminDeleteBtns.length === 0) {
+            console.error('[ADMIN] NO DELETE BUTTONS FOUND IN DOM!');
+            console.log('[ADMIN] eventsTable innerHTML:', eventsTable.innerHTML);
+        } else {
+            console.log('[ADMIN] SUCCESS - Delete buttons are in DOM');
+            adminDeleteBtns.forEach((btn, i) => {
+                console.log(`[ADMIN] Button ${i}:`, btn.outerHTML);
+            });
+        }
+    }, 200);
+    
+    console.log('[ADMIN] refreshAdminEventsList COMPLETE');
 }
+
+// Global function to handle admin delete (called by onclick)
+window.handleAdminDelete = async function(eventId) {
+    console.log('[ADMIN] handleAdminDelete called for event:', eventId);
+    
+    if (!confirm('このイベントを削除しますか？')) {
+        return;
+    }
+    
+    const button = document.querySelector(`[data-event-id="${eventId}"]`);
+    const row = button ? button.closest('.admin-event-row') : null;
+    
+    try {
+        if (button) {
+            button.disabled = true;
+            button.textContent = '削除中...';
+            button.style.backgroundColor = '#6c757d';
+        }
+        
+        await deleteEvent(eventId);
+        console.log('[ADMIN] Event deleted successfully:', eventId);
+        
+        // Remove from currentEvents array
+        const eventIndex = currentEvents.findIndex(event => event.id === eventId);
+        if (eventIndex !== -1) {
+            currentEvents.splice(eventIndex, 1);
+            console.log('[ADMIN] Event removed from currentEvents array');
+        }
+        
+        // Visual feedback and update
+        if (row) {
+            row.style.transition = 'opacity 0.3s ease';
+            row.style.opacity = '0';
+            
+            setTimeout(() => {
+                row.remove();
+                renderCalendar(); // Update calendar
+                showStatus('削除が完了しました', 'success');
+                console.log('[ADMIN] UI updated after deletion');
+            }, 300);
+        } else {
+            // Fallback: refresh the whole admin list
+            refreshAdminEventsList();
+            renderCalendar();
+            showStatus('削除が完了しました', 'success');
+        }
+        
+    } catch (error) {
+        console.error('[ADMIN] Delete failed:', error);
+        if (button) {
+            button.disabled = false;
+            button.textContent = '🗑️ 削除';
+            button.style.backgroundColor = '#dc3545';
+        }
+        showStatus('削除に失敗しました', 'error');
+    }
+};
+
+// Status message helper
+function showStatus(message, type) {
+    const badge = getCachedElement('statusBadge');
+    if (badge) {
+        badge.textContent = message;
+        badge.className = `status-badge status-${type}`;
+        badge.style.display = 'inline-block';
+        
+        setTimeout(() => {
+            badge.style.display = 'none';
+        }, 5000);
+    }
+    console.log(`[status] ${type.toUpperCase()}: ${message}`);
+}
+
+// Initialize current week to Monday of this week
+currentWeekStart = getWeekStart();
 
 // Event listeners
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM loaded, setting up event listeners...');
+    
     // Navigation buttons
-    const prevWeekBtn = getCachedElement('prevWeekBtn');
-    const nextWeekBtn = getCachedElement('nextWeekBtn');
-    const todayBtn = getCachedElement('todayBtn');
-    
-    if (prevWeekBtn) prevWeekBtn.addEventListener('click', goToPreviousWeek);
-    if (nextWeekBtn) nextWeekBtn.addEventListener('click', goToNextWeek);
-    if (todayBtn) todayBtn.addEventListener('click', goToToday);
-    
+    const prevWeekBtn = document.getElementById('prevWeekBtn');
+    const nextWeekBtn = document.getElementById('nextWeekBtn');
+    const todayBtn = document.getElementById('todayBtn');
+
+    if (prevWeekBtn) {
+        prevWeekBtn.addEventListener('click', goToPreviousWeek);
+        console.log('prevWeekBtn listener added');
+    }
+    if (nextWeekBtn) {
+        nextWeekBtn.addEventListener('click', goToNextWeek);
+        console.log('nextWeekBtn listener added');
+    }
+    if (todayBtn) {
+        todayBtn.addEventListener('click', goToToday);
+        console.log('todayBtn listener added');
+    }
+
     // CSV Upload button
-    const csvUploadBtn = getCachedElement('csvUploadBtn');
-    if (csvUploadBtn) csvUploadBtn.addEventListener('click', uploadCSV);
-    
-    // Admin toggle
-    const adminToggle = getCachedElement('adminToggle');
-    if (adminToggle) adminToggle.addEventListener('click', toggleAdminMode);
-    
+    const csvUploadBtn = document.getElementById('csvUploadBtn');
+    if (csvUploadBtn) {
+        csvUploadBtn.addEventListener('click', uploadCSV);
+        console.log('csvUploadBtn listener added');
+    } else {
+        console.error('csvUploadBtn not found!');
+    }
+
+    // Admin toggle - most important!
+    const adminToggle = document.getElementById('adminToggle');
+    if (adminToggle) {
+        // Remove any existing listeners
+        adminToggle.onclick = null;
+        // Add the emergency handler
+        adminToggle.addEventListener('click', window.toggleAdminModeHandler);
+        console.log('adminToggle EMERGENCY listener added successfully');
+    } else {
+        console.error('adminToggle not found!');
+    }
+
     // Refresh button
-    const refreshBtn = getCachedElement('refreshBtn');
-    if (refreshBtn) refreshBtn.addEventListener('click', fetchEvents);
-    
+    const refreshBtn = document.getElementById('refreshBtn');
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', fetchEvents);
+        console.log('refreshBtn listener added');
+    }
+
+    // Test admin toggle manually
+    setTimeout(() => {
+        const adminToggleTest = document.getElementById('adminToggle');
+        console.log('Admin toggle test after timeout:', adminToggleTest);
+        if (adminToggleTest) {
+            console.log('Admin toggle button text:', adminToggleTest.textContent);
+        }
+    }, 1000);
+
     // Initialize calendar
     fetchEvents();
 });

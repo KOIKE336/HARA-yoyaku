@@ -607,7 +607,8 @@
                 .then(result => {
                     console.log('Delete result:', result);
                     alert('削除が完了しました');
-                    window.showRealEvents(); // Refresh the list
+                    // Refresh both admin panel and calendar
+                    window.refreshAllData();
                 })
                 .catch(error => {
                     console.error('Delete error:', error);
@@ -698,8 +699,8 @@
                     alert(`${successCount}件を削除、${errorCount}件でエラーが発生しました`);
                 }
                 
-                // Refresh the admin panel
-                window.showRealEvents();
+                // Refresh both admin panel and calendar
+                window.refreshAllData();
                 
             } catch (error) {
                 console.error('Bulk delete error:', error);
@@ -711,6 +712,35 @@
                     bulkDeleteBtn.style.background = '#dc3545';
                 }
             }
+        };
+        
+        // Complete data refresh function for both admin and calendar
+        window.refreshAllData = function() {
+            console.log('INLINE: Refreshing all data...');
+            
+            // Fetch fresh data from API
+            fetch('/api/events')
+                .then(response => response.json())
+                .then(data => {
+                    console.log('INLINE: Fresh data received:', data);
+                    
+                    // Always refresh admin panel if currently in admin mode
+                    if (window.adminModeActive) {
+                        window.showRealEvents();
+                    }
+                    
+                    // Always trigger calendar refresh by calling the main calendar function
+                    if (typeof window.fetchEvents === 'function') {
+                        window.fetchEvents();
+                    } else {
+                        // Fallback: call the calendar function from the main script
+                        const event = new Event('calendarRefresh');
+                        document.dispatchEvent(event);
+                    }
+                })
+                .catch(error => {
+                    console.error('INLINE: Error refreshing data:', error);
+                });
         };
         
         // Set up event listener when DOM is ready
@@ -916,6 +946,12 @@
             
             // Initialize calendar
             fetchEvents();
+            
+            // Listen for custom refresh events
+            document.addEventListener('calendarRefresh', function() {
+                console.log('COMPLETE: Custom calendar refresh event received');
+                fetchEvents();
+            });
         });
         
         // CSV Upload function
