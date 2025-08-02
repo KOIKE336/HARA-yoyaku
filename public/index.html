@@ -432,24 +432,8 @@
                 if (calendarNav) calendarNav.style.display = 'none';
                 if (calendarContainer) calendarContainer.style.display = 'none';
                 
-                // Create test admin interface
-                const eventsTable = document.getElementById('eventsTable');
-                if (eventsTable) {
-                    eventsTable.innerHTML = `
-                        <div style="padding: 20px; background: white; border: 2px solid #28a745; border-radius: 8px; margin: 10px 0;">
-                            <h4 style="color: #28a745; margin-top: 0;">✅ 管理モード動作中</h4>
-                            <p style="margin: 10px 0;">この画面が表示されれば、管理モードは正常に動作しています。</p>
-                            <button onclick="alert('削除ボタンのテストが成功しました！')" 
-                                    style="background: #dc3545; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; margin: 5px;">
-                                🗑️ 削除ボタンテスト
-                            </button>
-                            <button onclick="window.showRealEvents()" 
-                                    style="background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; margin: 5px;">
-                                📋 実際のイベント表示
-                            </button>
-                        </div>
-                    `;
-                }
+                // Directly show real events list
+                window.showRealEvents();
             } else {
                 // Hide admin panel
                 adminPanel.style.display = 'none';
