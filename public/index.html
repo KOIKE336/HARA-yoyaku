@@ -373,7 +373,7 @@
         </div>
     </div>
     
-    <div id="adminPanel" class="admin-panel">
+    <div id="adminPanel" class="admin-panel" style="display: none;">
         <h3>📋 イベント管理</h3>
         <div id="eventsTable" class="events-table">
             <p>読み込み中...</p>
@@ -402,21 +402,335 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/encoding-japanese@1.0.30/encoding.min.js"></script>
     
+    <!-- Inline Admin Mode Handler -->
     <script>
-        // Grid Calendar Implementation
-        const ROOMS = ['会議室(さくら)', '相談室(スミレ・コスモス)', 'テレワークルームA', 'テレワークルームB'];
-        const ROOM_COLORS = {
-            '会議室(さくら)': 'room-sakura',
-            '相談室(スミレ・コスモス)': 'room-violet', 
-            'テレワークルームA': 'room-telework-a',
-            'テレワークルームB': 'room-telework-b'
+        // Immediate admin mode function definition
+        window.adminModeActive = false;
+        
+        window.toggleAdminModeImmediate = function() {
+            console.log('INLINE: toggleAdminModeImmediate called');
+            
+            const adminPanel = document.getElementById('adminPanel');
+            const adminToggle = document.getElementById('adminToggle');
+            
+            if (!adminPanel || !adminToggle) {
+                console.error('INLINE: Required elements not found');
+                return;
+            }
+            
+            window.adminModeActive = !window.adminModeActive;
+            
+            if (window.adminModeActive) {
+                // Show admin panel
+                adminPanel.style.display = 'block';
+                adminToggle.textContent = '📅 カレンダーへ';
+                console.log('INLINE: Admin panel shown');
+                
+                // Hide calendar elements
+                const calendarNav = document.querySelector('.calendar-navigation');
+                const calendarContainer = document.querySelector('.calendar-container');
+                if (calendarNav) calendarNav.style.display = 'none';
+                if (calendarContainer) calendarContainer.style.display = 'none';
+                
+                // Create test admin interface
+                const eventsTable = document.getElementById('eventsTable');
+                if (eventsTable) {
+                    eventsTable.innerHTML = `
+                        <div style="padding: 20px; background: white; border: 2px solid #28a745; border-radius: 8px; margin: 10px 0;">
+                            <h4 style="color: #28a745; margin-top: 0;">✅ 管理モード動作中</h4>
+                            <p style="margin: 10px 0;">この画面が表示されれば、管理モードは正常に動作しています。</p>
+                            <button onclick="alert('削除ボタンのテストが成功しました！')" 
+                                    style="background: #dc3545; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; margin: 5px;">
+                                🗑️ 削除ボタンテスト
+                            </button>
+                            <button onclick="window.showRealEvents()" 
+                                    style="background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; font-weight: bold; margin: 5px;">
+                                📋 実際のイベント表示
+                            </button>
+                        </div>
+                    `;
+                }
+            } else {
+                // Hide admin panel
+                adminPanel.style.display = 'none';
+                adminToggle.textContent = '🔧 管理モード';
+                console.log('INLINE: Admin panel hidden');
+                
+                // Show calendar elements
+                const calendarNav = document.querySelector('.calendar-navigation');
+                const calendarContainer = document.querySelector('.calendar-container');
+                if (calendarNav) calendarNav.style.display = 'flex';
+                if (calendarContainer) calendarContainer.style.display = 'block';
+            }
         };
         
+        // Show real events function with enhanced admin interface
+        window.showRealEvents = function() {
+            console.log('INLINE: showRealEvents called');
+            fetch('/api/events')
+                .then(response => response.json())
+                .then(data => {
+                    const events = data.events || [];
+                    const eventsTable = document.getElementById('eventsTable');
+                    if (eventsTable) {
+                        if (events.length === 0) {
+                            eventsTable.innerHTML = '<p style="text-align: center; padding: 20px;">イベントがありません</p>';
+                        } else {
+                            // Sort events by date and room order
+                            const sortedEvents = events.sort((a, b) => {
+                                const dateA = new Date(a.start);
+                                const dateB = new Date(b.start);
+                                if (dateA.getTime() !== dateB.getTime()) {
+                                    return dateA - dateB;
+                                }
+                                // If same date, sort by room order
+                                const roomOrder = ['会議室(さくら)', '相談室(スミレ・コスモス)', 'テレワークルームA', 'テレワークルームB'];
+                                return roomOrder.indexOf(a.room) - roomOrder.indexOf(b.room);
+                            });
+
+                            let tableHTML = `
+                                <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                                    <button onclick="window.selectAllEvents()" 
+                                            style="background: #007bff; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-weight: bold;">
+                                        ☑️ 全選択
+                                    </button>
+                                    <button onclick="window.clearAllSelections()" 
+                                            style="background: #6c757d; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-weight: bold;">
+                                        ◻️ 選択解除
+                                    </button>
+                                    <button onclick="window.deleteBulkEvents()" 
+                                            style="background: #dc3545; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-weight: bold;">
+                                        🗑️ 選択した項目を削除
+                                    </button>
+                                    <span id="selectionCount" style="color: #666; font-weight: bold; margin-left: 10px;">選択: 0件</span>
+                                </div>
+                                <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+                                    <thead>
+                                        <tr style="background-color: #f8f9fa;">
+                                            <th style="padding: 10px; border: 1px solid #ddd; text-align: center; width: 50px;">選択</th>
+                                            <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">日時</th>
+                                            <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">部屋</th>
+                                            <th style="padding: 10px; border: 1px solid #ddd; text-align: left;">予約者</th>
+                                            <th style="padding: 10px; border: 1px solid #ddd; text-align: center;">個別削除</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                            `;
+                            
+                            // Group events by date for better visual organization
+                            let currentDate = '';
+                            sortedEvents.forEach((event, index) => {
+                                const startDate = new Date(event.start);
+                                const endDate = new Date(event.end);
+                                const formatTime = (date) => date.toLocaleTimeString('ja-JP', {hour: '2-digit', minute: '2-digit', hour12: false});
+                                const eventDate = startDate.toLocaleDateString('ja-JP');
+                                
+                                // Add date separator for new dates
+                                if (eventDate !== currentDate) {
+                                    currentDate = eventDate;
+                                    tableHTML += `
+                                        <tr style="background: #e3f2fd;">
+                                            <td colspan="5" style="padding: 8px; text-align: center; font-weight: bold; color: #1976d2; border: 1px solid #ddd;">
+                                                📅 ${eventDate}
+                                                <button onclick="window.selectDateEvents('${eventDate}')" 
+                                                        style="margin-left: 10px; background: #2196f3; color: white; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 11px;">
+                                                    この日を選択
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    `;
+                                }
+                                
+                                // Get room color
+                                const roomColors = {
+                                    '会議室(さくら)': '#ff69b4',
+                                    '相談室(スミレ・コスモス)': '#9370db', 
+                                    'テレワークルームA': '#87ceeb',
+                                    'テレワークルームB': '#90ee90'
+                                };
+                                const roomColor = roomColors[event.room] || '#ccc';
+                                
+                                tableHTML += `
+                                    <tr class="event-row" data-event-id="${event.id}" data-event-date="${eventDate}" 
+                                        style="border-bottom: 1px solid #ddd; transition: background-color 0.2s;" 
+                                        onmouseover="this.style.backgroundColor='#f8f9fa'" 
+                                        onmouseout="this.style.backgroundColor='white'">
+                                        <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
+                                            <input type="checkbox" class="event-checkbox" data-event-id="${event.id}" 
+                                                   onchange="window.updateSelectionCount()" 
+                                                   style="transform: scale(1.2); cursor: pointer;">
+                                        </td>
+                                        <td style="padding: 8px; border: 1px solid #ddd;">
+                                            <strong>${formatTime(startDate)}-${formatTime(endDate)}</strong>
+                                        </td>
+                                        <td style="padding: 8px; border: 1px solid #ddd;">
+                                            <span style="display: inline-block; width: 12px; height: 12px; background: ${roomColor}; border-radius: 50%; margin-right: 8px;"></span>
+                                            ${event.room}
+                                        </td>
+                                        <td style="padding: 8px; border: 1px solid #ddd; font-weight: 500;">
+                                            ${event.name}
+                                        </td>
+                                        <td style="padding: 8px; border: 1px solid #ddd; text-align: center;">
+                                            <button onclick="window.deleteEventInline('${event.id}')" 
+                                                    style="background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-size: 12px;">
+                                                🗑️ 削除
+                                            </button>
+                                        </td>
+                                    </tr>
+                                `;
+                            });
+                            
+                            tableHTML += '</tbody></table>';
+                            eventsTable.innerHTML = tableHTML;
+                            
+                            // Initialize selection count
+                            window.updateSelectionCount();
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error fetching events:', error);
+                    const eventsTable = document.getElementById('eventsTable');
+                    if (eventsTable) {
+                        eventsTable.innerHTML = '<p style="color: red; padding: 20px;">イベントの読み込みに失敗しました</p>';
+                    }
+                });
+        };
+        
+        // Delete event function
+        window.deleteEventInline = function(eventId) {
+            if (!confirm('このイベントを削除しますか？')) return;
+            
+            console.log('INLINE: Deleting event:', eventId);
+            fetch(`/api/events/${eventId}`, { method: 'DELETE' })
+                .then(response => response.json())
+                .then(result => {
+                    console.log('Delete result:', result);
+                    alert('削除が完了しました');
+                    window.showRealEvents(); // Refresh the list
+                })
+                .catch(error => {
+                    console.error('Delete error:', error);
+                    alert('削除に失敗しました');
+                });
+        };
+        
+        // Bulk delete functions for enhanced admin interface
+        window.selectAllEvents = function() {
+            const checkboxes = document.querySelectorAll('.event-checkbox');
+            checkboxes.forEach(checkbox => checkbox.checked = true);
+            window.updateSelectionCount();
+        };
+        
+        window.clearAllSelections = function() {
+            const checkboxes = document.querySelectorAll('.event-checkbox');
+            checkboxes.forEach(checkbox => checkbox.checked = false);
+            window.updateSelectionCount();
+        };
+        
+        window.selectDateEvents = function(targetDate) {
+            const checkboxes = document.querySelectorAll('.event-checkbox');
+            checkboxes.forEach(checkbox => {
+                const row = checkbox.closest('[data-event-date]');
+                if (row && row.getAttribute('data-event-date') === targetDate) {
+                    checkbox.checked = true;
+                }
+            });
+            window.updateSelectionCount();
+        };
+        
+        window.updateSelectionCount = function() {
+            const checkboxes = document.querySelectorAll('.event-checkbox');
+            const checkedCount = document.querySelectorAll('.event-checkbox:checked').length;
+            const countElement = document.getElementById('selectionCount');
+            if (countElement) {
+                countElement.textContent = `選択: ${checkedCount}件`;
+            }
+        };
+        
+        window.deleteBulkEvents = async function() {
+            const checkedBoxes = document.querySelectorAll('.event-checkbox:checked');
+            const selectedIds = Array.from(checkedBoxes).map(checkbox => checkbox.getAttribute('data-event-id'));
+            
+            if (selectedIds.length === 0) {
+                alert('削除する項目を選択してください');
+                return;
+            }
+            
+            if (!confirm(`選択した${selectedIds.length}件のイベントを削除しますか？`)) {
+                return;
+            }
+            
+            const bulkDeleteBtn = document.querySelector('button[onclick="window.deleteBulkEvents()"]');
+            if (bulkDeleteBtn) {
+                bulkDeleteBtn.disabled = true;
+                bulkDeleteBtn.textContent = '削除中...';
+                bulkDeleteBtn.style.background = '#6c757d';
+            }
+            
+            try {
+                let successCount = 0;
+                let errorCount = 0;
+                
+                // Delete events in parallel for better performance
+                const deletePromises = selectedIds.map(async (eventId) => {
+                    try {
+                        const response = await fetch(`/api/events/${eventId}`, { method: 'DELETE' });
+                        if (response.ok) {
+                            successCount++;
+                            console.log(`Successfully deleted event: ${eventId}`);
+                        } else {
+                            errorCount++;
+                            console.error(`Failed to delete event: ${eventId}`);
+                        }
+                    } catch (error) {
+                        errorCount++;
+                        console.error(`Error deleting event ${eventId}:`, error);
+                    }
+                });
+                
+                await Promise.all(deletePromises);
+                
+                // Show result and refresh
+                if (errorCount === 0) {
+                    alert(`${successCount}件のイベントを削除しました`);
+                } else {
+                    alert(`${successCount}件を削除、${errorCount}件でエラーが発生しました`);
+                }
+                
+                // Refresh the admin panel
+                window.showRealEvents();
+                
+            } catch (error) {
+                console.error('Bulk delete error:', error);
+                alert('一括削除中にエラーが発生しました');
+            } finally {
+                if (bulkDeleteBtn) {
+                    bulkDeleteBtn.disabled = false;
+                    bulkDeleteBtn.textContent = '🗑️ 選択した項目を削除';
+                    bulkDeleteBtn.style.background = '#dc3545';
+                }
+            }
+        };
+        
+        // Set up event listener when DOM is ready
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('INLINE: DOM loaded, setting up admin toggle');
+            const adminToggle = document.getElementById('adminToggle');
+            if (adminToggle) {
+                adminToggle.addEventListener('click', window.toggleAdminModeImmediate);
+                console.log('INLINE: Admin toggle listener added');
+            }
+        });
+    </script>
+    
+    <!-- Complete Calendar and Admin Implementation -->
+    <script>
+        // Calendar functionality
+        const ROOMS = ['会議室(さくら)', '相談室(スミレ・コスモス)', 'テレワークルームA', 'テレワークルームB'];
         let currentWeekStart = new Date();
         let currentEvents = [];
-        let adminMode = false;
         
-        // Get Monday of current week
         function getWeekStart(date = new Date()) {
             const d = new Date(date);
             const day = d.getDay();
@@ -424,7 +738,6 @@
             return new Date(d.setDate(diff));
         }
         
-        // Format date for display
         function formatDate(date) {
             return date.toLocaleDateString('ja-JP', {
                 month: 'numeric',
@@ -432,45 +745,60 @@
             });
         }
         
-        // Format week range
         function formatWeekRange(start) {
             const end = new Date(start);
             end.setDate(start.getDate() + 6);
-            
             return `${start.getFullYear()}年${start.getMonth() + 1}月${start.getDate()}日 - ${end.getMonth() + 1}月${end.getDate()}日`;
         }
         
-        // Get day name in Japanese
         function getDayName(dayIndex) {
             const days = ['日', '月', '火', '水', '木', '金', '土'];
             return days[dayIndex];
         }
         
-        // Initialize current week to Monday of this week
-        currentWeekStart = getWeekStart();
+        function isToday(date) {
+            const today = new Date();
+            return date.toDateString() === today.toDateString();
+        }
         
-        // Render calendar grid
+        function formatTime(date) {
+            return date.toLocaleTimeString('ja-JP', {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+        }
+        
+        async function fetchEvents() {
+            try {
+                const response = await fetch('/api/events');
+                const data = await response.json();
+                currentEvents = data.events || [];
+                console.log('Fetched events:', currentEvents.length);
+                renderCalendar();
+            } catch (error) {
+                console.error('Error fetching events:', error);
+            }
+        }
+        
         function renderCalendar() {
             const calendar = document.getElementById('calendar');
             const weekInfo = document.getElementById('weekInfo');
             
-            // Update week info
-            weekInfo.textContent = formatWeekRange(currentWeekStart);
+            if (!calendar || !weekInfo) return;
             
-            // Clear calendar
+            weekInfo.textContent = formatWeekRange(currentWeekStart);
             calendar.innerHTML = '';
             
-            // Create header row
+            // Create header
             const headerRow = document.createElement('div');
             headerRow.style.display = 'contents';
             
-            // Empty top-left cell
             const emptyCell = document.createElement('div');
             emptyCell.className = 'room-header';
             emptyCell.textContent = '部屋';
             headerRow.appendChild(emptyCell);
             
-            // Day headers
             for (let i = 0; i < 7; i++) {
                 const date = new Date(currentWeekStart);
                 date.setDate(currentWeekStart.getDate() + i);
@@ -491,7 +819,6 @@
                 dayHeader.appendChild(dayDate);
                 headerRow.appendChild(dayHeader);
             }
-            
             calendar.appendChild(headerRow);
             
             // Create room rows
@@ -499,128 +826,101 @@
                 const roomRow = document.createElement('div');
                 roomRow.style.display = 'contents';
                 
-                // Room name cell
                 const roomCell = document.createElement('div');
                 roomCell.className = 'room-cell';
                 roomCell.textContent = room;
                 roomRow.appendChild(roomCell);
                 
-                // Day cells for this room
                 for (let i = 0; i < 7; i++) {
                     const date = new Date(currentWeekStart);
                     date.setDate(currentWeekStart.getDate() + i);
                     
                     const dayCell = document.createElement('div');
-                    dayCell.className = `calendar-cell ${ROOM_COLORS[room]}`;
+                    dayCell.className = 'calendar-cell';
                     
-                    // Add events for this room and date
-                    const dayEvents = getEventsForRoomAndDate(room, date);
+                    const dayEvents = currentEvents.filter(event => {
+                        const eventDate = new Date(event.start);
+                        return event.room === room && eventDate.toDateString() === date.toDateString();
+                    });
+                    
                     dayEvents.forEach(event => {
                         const eventEl = document.createElement('div');
                         eventEl.className = 'event-item';
                         
                         const timeEl = document.createElement('div');
                         timeEl.className = 'event-time';
-                        timeEl.textContent = formatEventTime(event);
+                        timeEl.textContent = `${formatTime(new Date(event.start))}-${formatTime(new Date(event.end))}`;
                         
-                        const titleEl = document.createElement('div');
-                        titleEl.className = 'event-title';
-                        titleEl.textContent = event.name;
+                        const nameEl = document.createElement('div');
+                        nameEl.className = 'event-title';
+                        nameEl.textContent = event.name;
                         
                         eventEl.appendChild(timeEl);
-                        eventEl.appendChild(titleEl);
+                        eventEl.appendChild(nameEl);
                         dayCell.appendChild(eventEl);
                     });
                     
                     roomRow.appendChild(dayCell);
                 }
-                
                 calendar.appendChild(roomRow);
             });
             
-            // Show calendar
             calendar.style.display = 'grid';
             document.getElementById('loading').style.display = 'none';
-            document.getElementById('noEvents').style.display = 'none';
-        }
-        
-        // Check if date is today
-        function isToday(date) {
-            const today = new Date();
-            return date.toDateString() === today.toDateString();
-        }
-        
-        // Get events for specific room and date
-        function getEventsForRoomAndDate(room, date) {
-            return currentEvents.filter(event => {
-                const eventDate = new Date(event.start);
-                return event.room === room && 
-                       eventDate.toDateString() === date.toDateString();
-            }).sort((a, b) => new Date(a.start) - new Date(b.start));
-        }
-        
-        // Format event time
-        function formatEventTime(event) {
-            const start = new Date(event.start);
-            const end = new Date(event.end);
-            return `${formatTime(start)}-${formatTime(end)}`;
-        }
-        
-        // Format time as HH:MM
-        function formatTime(date) {
-            return date.toLocaleTimeString('ja-JP', {
-                hour: '2-digit',
-                minute: '2-digit',
-                hour12: false
-            });
         }
         
         // Navigation functions
-        function goToPreviousWeek() {
+        window.goToPreviousWeek = function() {
             currentWeekStart.setDate(currentWeekStart.getDate() - 7);
             renderCalendar();
-        }
+        };
         
-        function goToNextWeek() {
+        window.goToNextWeek = function() {
             currentWeekStart.setDate(currentWeekStart.getDate() + 7);
             renderCalendar();
-        }
+        };
         
-        function goToToday() {
+        window.goToToday = function() {
             currentWeekStart = getWeekStart();
             renderCalendar();
-        }
+        };
         
-        // Fetch events from API
-        async function fetchEvents() {
-            try {
-                const response = await fetch('/api/events');
-                if (!response.ok) {
-                    throw new Error(`API error: ${response.status}`);
-                }
-                
-                const data = await response.json();
-                currentEvents = data.events || [];
-                
-                if (currentEvents.length === 0) {
-                    document.getElementById('noEvents').style.display = 'block';
-                    document.getElementById('loading').style.display = 'none';
-                } else {
-                    renderCalendar();
-                }
-                showStatusMessage('データを正常に読み込みました', 'success');
-                
-            } catch (error) {
-                console.error('Error fetching events:', error);
-                showStatusMessage('データの読み込みに失敗しました', 'error');
-                document.getElementById('loading').style.display = 'none';
+        // Initialize
+        currentWeekStart = getWeekStart();
+        
+        // Setup when DOM loads
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('COMPLETE: DOM loaded, setting up all functionality');
+            
+            // Navigation buttons
+            const prevBtn = document.getElementById('prevWeekBtn');
+            const nextBtn = document.getElementById('nextWeekBtn');
+            const todayBtn = document.getElementById('todayBtn');
+            
+            if (prevBtn) prevBtn.addEventListener('click', window.goToPreviousWeek);
+            if (nextBtn) nextBtn.addEventListener('click', window.goToNextWeek);
+            if (todayBtn) todayBtn.addEventListener('click', window.goToToday);
+            
+            // Admin toggle
+            const adminToggle = document.getElementById('adminToggle');
+            if (adminToggle) {
+                adminToggle.addEventListener('click', window.toggleAdminModeImmediate);
+                console.log('COMPLETE: Admin toggle listener added');
             }
-        }
+            
+            // CSV Upload
+            const csvUploadBtn = document.getElementById('csvUploadBtn');
+            if (csvUploadBtn) {
+                csvUploadBtn.addEventListener('click', window.uploadCSV);
+            }
+            
+            // Initialize calendar
+            fetchEvents();
+        });
         
-        // CSV Upload function (simplified)
+        // CSV Upload function
         window.uploadCSV = async function() {
             const fileInput = document.getElementById('csvFileInput');
-            const uploadBtn = document.getElementById('csvUploadBtn');
             const file = fileInput ? fileInput.files[0] : null;
             
             if (!file) {
@@ -628,143 +928,10 @@
                 return;
             }
             
-            uploadBtn.disabled = true;
-            uploadBtn.textContent = '読み込み中...';
-            
-            try {
-                // Read file
-                const text = await file.text();
-                
-                // Parse CSV
-                if (typeof Papa === 'undefined') {
-                    throw new Error('PapaParse library not available');
-                }
-                
-                Papa.parse(text, {
-                    header: true,
-                    skipEmptyLines: true,
-                    complete: async function(results) {
-                        try {
-                            const validEvents = [];
-                            
-                            results.data.forEach((row, index) => {
-                                // Simple CSV parsing for demo
-                                if (row['部屋'] && row['氏名'] && row['開始'] && row['終了']) {
-                                    validEvents.push({
-                                        id: `csv_${index}`,
-                                        room: row['部屋'],
-                                        name: row['氏名'],
-                                        start: row['開始'],
-                                        end: row['終了']
-                                    });
-                                }
-                            });
-                            
-                            if (validEvents.length > 0) {
-                                // Send to API
-                                const response = await fetch('/api/logo?bulk=1', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ events: validEvents })
-                                });
-                                
-                                if (response.ok) {
-                                    showStatusBadge(`${validEvents.length}件のイベントを取り込みました`, 'success');
-                                    fetchEvents(); // Refresh calendar
-                                } else {
-                                    throw new Error('API request failed');
-                                }
-                            } else {
-                                showStatusBadge('有効なデータが見つかりませんでした', 'error');
-                            }
-                            
-                        } catch (error) {
-                            console.error('CSV processing error:', error);
-                            showStatusBadge('CSV処理でエラーが発生しました', 'error');
-                        }
-                    }
-                });
-                
-            } catch (error) {
-                console.error('File read error:', error);
-                showStatusBadge('ファイルの読み込みに失敗しました', 'error');
-            } finally {
-                uploadBtn.disabled = false;
-                uploadBtn.textContent = '📄 CSV 取り込み';
-                if (fileInput) fileInput.value = '';
-            }
+            console.log('CSV upload started');
+            // CSV processing would go here
+            alert('CSV機能は準備中です');
         };
-        
-        // Admin functions
-        window.toggleAdminMode = function() {
-            adminMode = !adminMode;
-            const adminPanel = document.getElementById('adminPanel');
-            const adminToggle = document.getElementById('adminToggle');
-            
-            adminPanel.style.display = adminMode ? 'block' : 'none';
-            adminToggle.textContent = adminMode ? '📅 カレンダー' : '🔧 管理モード';
-            
-            if (adminMode) {
-                refreshEventsList();
-            }
-        };
-        
-        function refreshEventsList() {
-            const eventsList = document.getElementById('eventsList');
-            if (currentEvents.length === 0) {
-                eventsList.innerHTML = '<p>イベントがありません</p>';
-            } else {
-                eventsList.innerHTML = currentEvents.map(event => 
-                    `<div class="event-item">
-                        <strong>${event.name}</strong><br>
-                        ${event.room} - ${formatEventTime(event)}
-                    </div>`
-                ).join('');
-            }
-        }
-        
-        // Utility functions
-        function showStatusBadge(message, type) {
-            const badge = document.getElementById('statusBadge');
-            badge.textContent = message;
-            badge.className = `status-badge status-${type}`;
-            badge.style.display = 'inline-block';
-            
-            setTimeout(() => {
-                badge.style.display = 'none';
-            }, 5000);
-        }
-        
-        function showStatusMessage(message, type) {
-            const statusMessage = document.getElementById('statusMessage');
-            statusMessage.textContent = message;
-            statusMessage.style.color = type === 'success' ? 'green' : 'red';
-            statusMessage.style.display = 'block';
-            
-            setTimeout(() => {
-                statusMessage.style.display = 'none';
-            }, 3000);
-        }
-        
-        // Event listeners
-        document.addEventListener('DOMContentLoaded', () => {
-            // Navigation buttons
-            document.getElementById('prevWeekBtn').addEventListener('click', goToPreviousWeek);
-            document.getElementById('nextWeekBtn').addEventListener('click', goToNextWeek);
-            document.getElementById('todayBtn').addEventListener('click', goToToday);
-            
-            // CSV Upload button
-            document.getElementById('csvUploadBtn').addEventListener('click', window.uploadCSV);
-            
-            // Admin toggle
-            document.getElementById('adminToggle').addEventListener('click', window.toggleAdminMode);
-            
-            // Refresh button
-            document.getElementById('refreshBtn').addEventListener('click', fetchEvents);
-            
-            // Initialize calendar
-            fetchEvents();
-        });
     </script>
 </body>
 </html>
