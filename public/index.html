@@ -1063,9 +1063,12 @@
                                             
                                             // Clean up the time format - fix character encoding issues
                                             let cleanSlot = slot.trim()
-                                                .replace(/�F/g, ':')  // Fix character encoding for colon
-                                                .replace(/�`/g, '～')  // Fix character encoding for tilde
-                                                .replace(/`/g, '～');   // Replace backtick with tilde
+                                                .replace(/[\uFFFD]/g, '')  // Remove replacement characters
+                                                .replace(/F/g, ':')  // Sometimes 'F' appears instead of colon
+                                                .replace(/`/g, '～')  // Replace backtick with tilde
+                                                .replace(/\\/g, '～')  // Sometimes backslash appears
+                                                .replace(/[\u65374\u12316\u8230]/g, '～')  // Various tilde characters
+                                                .replace(/[\u65306\u12306]/g, ':');  // Various colon characters
                                             
                                             console.log(`Cleaned slot: "${cleanSlot}"`);
                                             
@@ -1170,8 +1173,14 @@
                                     
                                     alert(message);
                                     
-                                    // Refresh calendar and admin panel
-                                    window.refreshAllData();
+                                    // Force refresh calendar and admin panel with delay
+                                    setTimeout(() => {
+                                        window.refreshAllData();
+                                        // Also trigger a direct calendar refresh
+                                        setTimeout(() => {
+                                            fetchEvents();
+                                        }, 500);
+                                    }, 1000);
                                     
                                 } else {
                                     throw new Error('Bulk upload failed');

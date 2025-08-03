@@ -154,7 +154,9 @@ export default async function handler(req, res) {
     console.log('[kv] Raw events count:', events.length);
     
     // 期限切れイベントの自動削除（終了時刻が現在時刻より過去）
+    // Note: 1週間以上古いイベントのみ削除（テストデータ保護のため）
     const now = new Date();
+    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     const validEvents = events.filter(event => {
       if (!event.end) {
         console.log('[kv] Event missing end time:', event.id);
@@ -162,10 +164,10 @@ export default async function handler(req, res) {
       }
       
       const eventEndTime = new Date(event.end);
-      const isValid = eventEndTime >= now;
+      const isValid = eventEndTime >= oneWeekAgo;  // 1週間以内は保持
       
       if (!isValid) {
-        console.log('[kv] Expired event removed:', event.id, event.end);
+        console.log('[kv] Expired event removed (older than 1 week):', event.id, event.end);
       }
       
       return isValid;
