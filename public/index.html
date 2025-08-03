@@ -941,6 +941,7 @@
         // CSV Upload function
         window.uploadCSV = async function() {
             const fileInput = document.getElementById('csvFileInput');
+            const uploadBtn = document.getElementById('csvUploadBtn');
             const file = fileInput ? fileInput.files[0] : null;
             
             if (!file) {
@@ -949,8 +950,147 @@
             }
             
             console.log('CSV upload started');
-            // CSV processing would go here
-            alert('CSV機能は準備中です');
+            
+            if (uploadBtn) {
+                uploadBtn.disabled = true;
+                uploadBtn.textContent = '読み込み中...';
+            }
+            
+            try {
+                // Read file
+                const text = await file.text();
+                console.log('CSV file read successfully');
+                
+                // Parse CSV using PapaParse
+                if (typeof Papa === 'undefined') {
+                    throw new Error('PapaParse library not available');
+                }
+                
+                Papa.parse(text, {
+                    header: true,
+                    skipEmptyLines: true,
+                    complete: async function(results) {
+                        try {
+                            console.log(`CSV parsed: ${results.data.length} rows`);
+                            const validEvents = [];
+                            const errorRows = [];
+                            
+                            results.data.forEach((row, index) => {
+                                let eventData = null;
+                                
+                                // Try different column mappings
+                                if (row['部屋'] && row['氏名'] && row['開始'] && row['終了']) {
+                                    // Simple format
+                                    eventData = {
+                                        id: `csv_${Date.now()}_${index}`,
+                                        room: row['部屋'],
+                                        name: row['氏名'],
+                                        start: row['開始'],
+                                        end: row['終了']
+                                    };
+                                } else if (row['5:date'] && (row['7:checkbox'] || row['8:checkbox'] || row['234:checkbox'] || row['235:checkbox'])) {
+                                    // LogoForm format
+                                    const name = `${row['244:firstname'] || ''} ${row['244:lastname'] || ''}`.trim() || 
+                                                 `${row['91:firstname'] || ''} ${row['91:lastname'] || ''}`.trim() || 
+                                                 '予約者';
+                                    
+                                    // Find active room and time
+                                    let room = '';
+                                    let timeData = '';
+                                    
+                                    if (row['7:checkbox']) {
+                                        room = '会議室(さくら)';
+                                        timeData = row['7:checkbox'];
+                                    } else if (row['8:checkbox']) {
+                                        room = '相談室(スミレ・コスモス)';
+                                        timeData = row['8:checkbox'];
+                                    } else if (row['234:checkbox']) {
+                                        room = 'テレワークルームA';
+                                        timeData = row['234:checkbox'];
+                                    } else if (row['235:checkbox']) {
+                                        room = 'テレワークルームB';
+                                        timeData = row['235:checkbox'];
+                                    }
+                                    
+                                    if (room && timeData && timeData.includes('～')) {
+                                        const [startTime, endTime] = timeData.split('～');
+                                        const dateStr = row['5:date'];
+                                        
+                                        eventData = {
+                                            id: `csv_${Date.now()}_${index}`,
+                                            room: room,
+                                            name: name,
+                                            start: `${dateStr}T${startTime.trim()}:00`,
+                                            end: `${dateStr}T${endTime.trim()}:00`
+                                        };
+                                    }
+                                }
+                                
+                                if (eventData) {
+                                    validEvents.push(eventData);
+                                } else {
+                                    errorRows.push(index + 1);
+                                }
+                            });
+                            
+                            console.log(`Valid events: ${validEvents.length}, errors: ${errorRows.length}`);
+                            
+                            if (validEvents.length > 0) {
+                                // Delete all existing events first (replace mode)
+                                const deleteResponse = await fetch('/api/events', { method: 'DELETE' });
+                                if (!deleteResponse.ok) {
+                                    throw new Error('Failed to clear existing events');
+                                }
+                                
+                                // Upload new events with replace mode
+                                const response = await fetch('/api/logo?bulk=1&replace=1', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ events: validEvents })
+                                });
+                                
+                                if (response.ok) {
+                                    let message = `${validEvents.length}件を取り込み、旧データを上書きしました`;
+                                    
+                                    if (errorRows.length > 0) {
+                                        message += ` (${errorRows.length}件スキップ)`;
+                                    }
+                                    
+                                    alert(message);
+                                    
+                                    // Refresh calendar and admin panel
+                                    window.refreshAllData();
+                                    
+                                } else {
+                                    throw new Error('Bulk upload failed');
+                                }
+                            } else {
+                                alert('有効なデータが見つかりませんでした');
+                            }
+                            
+                        } catch (error) {
+                            console.error('CSV processing error:', error);
+                            alert('CSV処理でエラーが発生しました: ' + error.message);
+                        }
+                    },
+                    error: function(error) {
+                        console.error('CSV parse error:', error);
+                        alert('CSVファイルの解析に失敗しました');
+                    }
+                });
+                
+            } catch (error) {
+                console.error('CSV file read error:', error);
+                alert('ファイルの読み込みに失敗しました: ' + error.message);
+            } finally {
+                if (uploadBtn) {
+                    uploadBtn.disabled = false;
+                    uploadBtn.textContent = '📄 CSV 取り込み';
+                }
+                if (fileInput) {
+                    fileInput.value = '';
+                }
+            }
         };
     </script>
 </body>
