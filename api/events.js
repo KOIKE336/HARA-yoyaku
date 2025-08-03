@@ -86,6 +86,7 @@ export default async function handler(req, res) {
         
         await kv.set('events', filteredEvents);
         console.log(`[events] Deleted event ${eventId}, remaining: ${filteredEvents.length}`);
+        console.log(`[events] Remaining event IDs:`, filteredEvents.map(e => e.id));
         
         return res.status(200).json({ 
           deleted: true, 
@@ -157,6 +158,9 @@ export default async function handler(req, res) {
     // Note: 1週間以上古いイベントのみ削除（テストデータ保護のため）
     const now = new Date();
     const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    console.log('[kv] Checking expiry: now =', now.toISOString(), 'oneWeekAgo =', oneWeekAgo.toISOString());
+    console.log('[kv] Raw events before expiry check:', events.map(e => ({id: e.id, end: e.end})));
+    
     const validEvents = events.filter(event => {
       if (!event.end) {
         console.log('[kv] Event missing end time:', event.id);
@@ -167,11 +171,15 @@ export default async function handler(req, res) {
       const isValid = eventEndTime >= oneWeekAgo;  // 1週間以内は保持
       
       if (!isValid) {
-        console.log('[kv] Expired event removed (older than 1 week):', event.id, event.end);
+        console.log('[kv] Expired event removed (older than 1 week):', event.id, event.end, 'eventEndTime:', eventEndTime.toISOString());
+      } else {
+        console.log('[kv] Event kept:', event.id, event.end, 'eventEndTime:', eventEndTime.toISOString());
       }
       
       return isValid;
     });
+    
+    console.log('[kv] Events after expiry filter:', validEvents.map(e => ({id: e.id, end: e.end})));
     
     // 期限切れイベントが削除された場合、KVを更新
     if (validEvents.length !== events.length) {
@@ -188,6 +196,7 @@ export default async function handler(req, res) {
     }
     
     console.log('[kv] ✅ KV read SUCCESS:', validEvents.length, 'events');
+    console.log('[kv] Valid events IDs:', validEvents.map(e => e.id));
     console.log('[kv] Events data:', JSON.stringify(validEvents));
 
     res.status(200).json({ events: validEvents });
