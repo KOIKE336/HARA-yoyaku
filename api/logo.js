@@ -1,4 +1,26 @@
-import { kv } from '@vercel/kv';
+// Use Redis client for Upstash compatibility
+const kv = {
+  async get(key) {
+    const response = await fetch(`${process.env.KV_REST_API_URL}/get/${key}`, {
+      headers: { 'Authorization': `Bearer ${process.env.KV_REST_API_TOKEN}` }
+    });
+    if (!response.ok) throw new Error(`KV GET failed: ${response.status}`);
+    const result = await response.json();
+    return result.result;
+  },
+  async set(key, value) {
+    const response = await fetch(`${process.env.KV_REST_API_URL}/set/${key}`, {
+      method: 'POST',
+      headers: { 
+        'Authorization': `Bearer ${process.env.KV_REST_API_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(value)
+    });
+    if (!response.ok) throw new Error(`KV SET failed: ${response.status}`);
+    return await response.json();
+  }
+};
 
 export default async function handler(req, res) {
   console.log('[kv] POST request received');
