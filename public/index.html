@@ -666,30 +666,43 @@
                 let successCount = 0;
                 let errorCount = 0;
                 
-                // Delete events in parallel for better performance
-                const deletePromises = selectedIds.map(async (eventId) => {
+                // Delete events sequentially to avoid race conditions
+                for (const eventId of selectedIds) {
                     try {
+                        console.log(`Starting delete for event: ${eventId}`);
                         const response = await fetch(`/api/events/${eventId}`, { method: 'DELETE' });
+                        const result = await response.json();
+                        console.log(`Delete response for ${eventId}:`, result);
+                        
                         if (response.ok) {
                             successCount++;
                             console.log(`Successfully deleted event: ${eventId}`);
                         } else {
                             errorCount++;
-                            console.error(`Failed to delete event: ${eventId}`);
+                            console.error(`Failed to delete event: ${eventId}`, result);
                         }
                     } catch (error) {
                         errorCount++;
                         console.error(`Error deleting event ${eventId}:`, error);
                     }
-                });
-                
-                await Promise.all(deletePromises);
+                }
                 
                 // Show result and refresh
                 if (errorCount === 0) {
                     alert(`${successCount}件のイベントを削除しました`);
                 } else {
                     alert(`${successCount}件を削除、${errorCount}件でエラーが発生しました`);
+                }
+                
+                // Check final state before refresh
+                console.log('Checking final state after all deletions...');
+                try {
+                    const finalResponse = await fetch('/api/events');
+                    const finalData = await finalResponse.json();
+                    console.log('Final events after deletion:', finalData.events);
+                    console.log('Final event count:', finalData.events?.length || 0);
+                } catch (error) {
+                    console.error('Error checking final state:', error);
                 }
                 
                 // Refresh both admin panel and calendar
