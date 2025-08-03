@@ -1019,40 +1019,87 @@
                                         end: cleanEnd
                                     };
                                 } else if (row['5:date'] && (row['7:checkbox'] || row['8:checkbox'] || row['234:checkbox'] || row['235:checkbox'])) {
-                                    // LogoForm format
-                                    const name = `${row['244:firstname'] || ''} ${row['244:lastname'] || ''}`.trim() || 
-                                                 `${row['91:firstname'] || ''} ${row['91:lastname'] || ''}`.trim() || 
-                                                 '予約者';
+                                    // LogoForm format - improved parsing
+                                    console.log('LogoForm format detected');
+                                    
+                                    const firstname = row['244:firstname'] || row['91:firstname'] || '';
+                                    const lastname = row['244:lastname'] || row['91:lastname'] || '';
+                                    const name = `${firstname} ${lastname}`.trim() || '予約者';
+                                    
+                                    console.log(`Name parsed: "${firstname}" + "${lastname}" = "${name}"`);
                                     
                                     // Find active room and time
                                     let room = '';
                                     let timeData = '';
                                     
-                                    if (row['7:checkbox']) {
+                                    if (row['7:checkbox'] && row['7:checkbox'].trim()) {
                                         room = '会議室(さくら)';
                                         timeData = row['7:checkbox'];
-                                    } else if (row['8:checkbox']) {
+                                        console.log('Found 会議室(さくら) reservation:', timeData);
+                                    } else if (row['8:checkbox'] && row['8:checkbox'].trim()) {
                                         room = '相談室(スミレ・コスモス)';
                                         timeData = row['8:checkbox'];
-                                    } else if (row['234:checkbox']) {
+                                        console.log('Found 相談室(スミレ・コスモス) reservation:', timeData);
+                                    } else if (row['234:checkbox'] && row['234:checkbox'].trim()) {
                                         room = 'テレワークルームA';
                                         timeData = row['234:checkbox'];
-                                    } else if (row['235:checkbox']) {
+                                        console.log('Found テレワークルームA reservation:', timeData);
+                                    } else if (row['235:checkbox'] && row['235:checkbox'].trim()) {
                                         room = 'テレワークルームB';
                                         timeData = row['235:checkbox'];
+                                        console.log('Found テレワークルームB reservation:', timeData);
                                     }
                                     
-                                    if (room && timeData && timeData.includes('～')) {
-                                        const [startTime, endTime] = timeData.split('～');
-                                        const dateStr = row['5:date'];
+                                    if (room && timeData) {
+                                        let startTime, endTime;
                                         
-                                        eventData = {
-                                            id: `csv_${Date.now()}_${index}`,
-                                            room: room,
-                                            name: name,
-                                            start: `${dateStr}T${startTime.trim()}:00`,
-                                            end: `${dateStr}T${endTime.trim()}:00`
-                                        };
+                                        if (timeData.includes('～')) {
+                                            [startTime, endTime] = timeData.split('～');
+                                        } else if (timeData.includes('〜')) {
+                                            [startTime, endTime] = timeData.split('〜');
+                                        } else if (timeData.includes('-')) {
+                                            [startTime, endTime] = timeData.split('-');
+                                        } else if (timeData.includes('`')) {
+                                            [startTime, endTime] = timeData.split('`');
+                                        } else {
+                                            // If no separator found, try to extract time range pattern
+                                            const timeMatch = timeData.match(/(\d{1,2}):?(\d{2}).*?(\d{1,2}):?(\d{2})/);
+                                            if (timeMatch) {
+                                                startTime = `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}`;
+                                                endTime = `${timeMatch[3].padStart(2, '0')}:${timeMatch[4]}`;
+                                            }
+                                        }
+                                        
+                                        if (startTime && endTime) {
+                                            startTime = startTime.trim();
+                                            endTime = endTime.trim();
+                                            
+                                            // Convert date format from 2025/7/30 to 2025-07-30
+                                            let dateStr = row['5:date'].trim();
+                                            if (dateStr.includes('/')) {
+                                                const dateParts = dateStr.split('/');
+                                                if (dateParts.length === 3) {
+                                                    const year = dateParts[0];
+                                                    const month = dateParts[1].padStart(2, '0');
+                                                    const day = dateParts[2].padStart(2, '0');
+                                                    dateStr = `${year}-${month}-${day}`;
+                                                }
+                                            }
+                                            
+                                            eventData = {
+                                                id: `csv_${Date.now()}_${index}`,
+                                                room: room,
+                                                name: name,
+                                                start: `${dateStr}T${startTime}:00`,
+                                                end: `${dateStr}T${endTime}:00`
+                                            };
+                                            
+                                            console.log('Successfully created event data:', eventData);
+                                        } else {
+                                            console.log('Failed to parse time from:', timeData);
+                                        }
+                                    } else {
+                                        console.log('No room or time data found');
                                     }
                                 }
                                 
