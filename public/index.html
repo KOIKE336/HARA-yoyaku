@@ -1051,61 +1051,89 @@
                                     }
                                     
                                     if (room && timeData) {
-                                        let startTime, endTime;
+                                        // Handle multiple time slots separated by semicolon
+                                        const timeSlots = timeData.split(';');
+                                        console.log('Time slots found:', timeSlots);
                                         
-                                        if (timeData.includes('～')) {
-                                            [startTime, endTime] = timeData.split('～');
-                                        } else if (timeData.includes('〜')) {
-                                            [startTime, endTime] = timeData.split('〜');
-                                        } else if (timeData.includes('-')) {
-                                            [startTime, endTime] = timeData.split('-');
-                                        } else if (timeData.includes('`')) {
-                                            [startTime, endTime] = timeData.split('`');
-                                        } else {
-                                            // If no separator found, try to extract time range pattern
-                                            const timeMatch = timeData.match(/(\d{1,2}):?(\d{2}).*?(\d{1,2}):?(\d{2})/);
-                                            if (timeMatch) {
-                                                startTime = `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}`;
-                                                endTime = `${timeMatch[3].padStart(2, '0')}:${timeMatch[4]}`;
-                                            }
-                                        }
-                                        
-                                        if (startTime && endTime) {
-                                            startTime = startTime.trim();
-                                            endTime = endTime.trim();
+                                        // Process each time slot and create separate events
+                                        timeSlots.forEach((slot, slotIndex) => {
+                                            if (!slot.trim()) return;
                                             
-                                            // Convert date format from 2025/7/30 to 2025-07-30
-                                            let dateStr = row['5:date'].trim();
-                                            if (dateStr.includes('/')) {
-                                                const dateParts = dateStr.split('/');
-                                                if (dateParts.length === 3) {
-                                                    const year = dateParts[0];
-                                                    const month = dateParts[1].padStart(2, '0');
-                                                    const day = dateParts[2].padStart(2, '0');
-                                                    dateStr = `${year}-${month}-${day}`;
+                                            console.log(`Processing time slot ${slotIndex + 1}: "${slot}"`);
+                                            
+                                            // Clean up the time format - fix character encoding issues
+                                            let cleanSlot = slot.trim()
+                                                .replace(/�F/g, ':')  // Fix character encoding for colon
+                                                .replace(/�`/g, '～')  // Fix character encoding for tilde
+                                                .replace(/`/g, '～');   // Replace backtick with tilde
+                                            
+                                            console.log(`Cleaned slot: "${cleanSlot}"`);
+                                            
+                                            let startTime, endTime;
+                                            
+                                            if (cleanSlot.includes('～')) {
+                                                [startTime, endTime] = cleanSlot.split('～');
+                                            } else if (cleanSlot.includes('〜')) {
+                                                [startTime, endTime] = cleanSlot.split('〜');
+                                            } else if (cleanSlot.includes('-')) {
+                                                [startTime, endTime] = cleanSlot.split('-');
+                                            } else {
+                                                // Try regex pattern for time extraction
+                                                const timeMatch = cleanSlot.match(/(\d{1,2}):(\d{2}).*?(\d{1,2}):(\d{2})/);
+                                                if (timeMatch) {
+                                                    startTime = `${timeMatch[1].padStart(2, '0')}:${timeMatch[2]}`;
+                                                    endTime = `${timeMatch[3].padStart(2, '0')}:${timeMatch[4]}`;
+                                                    console.log(`Regex extracted: ${startTime} - ${endTime}`);
                                                 }
                                             }
                                             
-                                            eventData = {
-                                                id: `csv_${Date.now()}_${index}`,
-                                                room: room,
-                                                name: name,
-                                                start: `${dateStr}T${startTime}:00`,
-                                                end: `${dateStr}T${endTime}:00`
-                                            };
-                                            
-                                            console.log('Successfully created event data:', eventData);
-                                        } else {
-                                            console.log('Failed to parse time from:', timeData);
-                                        }
+                                            if (startTime && endTime) {
+                                                startTime = startTime.trim();
+                                                endTime = endTime.trim();
+                                                
+                                                console.log(`Parsed times: "${startTime}" to "${endTime}"`);
+                                                
+                                                // Convert date format from 2025/7/30 to 2025-07-30
+                                                let dateStr = row['5:date'].trim();
+                                                if (dateStr.includes('/')) {
+                                                    const dateParts = dateStr.split('/');
+                                                    if (dateParts.length === 3) {
+                                                        const year = dateParts[0];
+                                                        const month = dateParts[1].padStart(2, '0');
+                                                        const day = dateParts[2].padStart(2, '0');
+                                                        dateStr = `${year}-${month}-${day}`;
+                                                    }
+                                                }
+                                                
+                                                const slotEventData = {
+                                                    id: `csv_${Date.now()}_${index}_${slotIndex}`,
+                                                    room: room,
+                                                    name: name,
+                                                    start: `${dateStr}T${startTime}:00`,
+                                                    end: `${dateStr}T${endTime}:00`
+                                                };
+                                                
+                                                // Add to validEvents array directly here
+                                                validEvents.push(slotEventData);
+                                                console.log('Successfully created time slot event:', slotEventData);
+                                                
+                                            } else {
+                                                console.log('Failed to parse time from slot:', cleanSlot);
+                                            }
+                                        });
+                                        
+                                        // Mark as processed (don't create eventData for the main loop)
+                                        eventData = 'processed';
                                     } else {
                                         console.log('No room or time data found');
                                     }
                                 }
                                 
-                                if (eventData) {
+                                if (eventData && eventData !== 'processed') {
                                     validEvents.push(eventData);
                                     console.log(`Row ${index + 1}: Successfully parsed event`, eventData);
+                                } else if (eventData === 'processed') {
+                                    console.log(`Row ${index + 1}: LogoForm time slots processed successfully`);
                                 } else {
                                     errorRows.push(index + 1);
                                     console.log(`Row ${index + 1}: Failed to parse - missing required columns`);
