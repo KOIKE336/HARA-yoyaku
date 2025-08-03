@@ -1144,10 +1144,14 @@
                             console.log(`Valid events: ${validEvents.length}, errors: ${errorRows.length}`);
                             
                             if (validEvents.length > 0) {
-                                // Delete all existing events first (replace mode)
-                                const deleteResponse = await fetch('/api/events', { method: 'DELETE' });
-                                if (!deleteResponse.ok) {
-                                    throw new Error('Failed to clear existing events');
+                                // Try to delete all existing events first (replace mode)
+                                try {
+                                    const deleteResponse = await fetch('/api/events', { method: 'DELETE' });
+                                    if (!deleteResponse.ok) {
+                                        console.warn('Could not clear existing events, proceeding anyway');
+                                    }
+                                } catch (deleteError) {
+                                    console.warn('Delete operation failed, proceeding anyway:', deleteError);
                                 }
                                 
                                 // Upload new events with replace mode
