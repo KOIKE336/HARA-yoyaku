@@ -60,7 +60,24 @@ export default async function handler(req, res) {
     if (eventId && eventId !== 'events') {
       // Single event delete
       try {
-        const events = await kv.get('events') || [];
+        let events = await kv.get('events') || [];
+        console.log('[delete] Raw events from KV:', events);
+        
+        // Ensure events is always an array
+        if (!events) {
+          events = [];
+        } else if (typeof events === 'string') {
+          try {
+            events = JSON.parse(events);
+          } catch (parseError) {
+            console.error('[delete] JSON parse error:', parseError);
+            events = [];
+          }
+        } else if (!Array.isArray(events)) {
+          console.log('[delete] Events is not array, converting:', events);
+          events = [];
+        }
+        
         const filteredEvents = events.filter(event => event.id !== eventId);
         
         if (filteredEvents.length === events.length) {
@@ -110,7 +127,24 @@ export default async function handler(req, res) {
     try {
       events = await kv.get('events');
       console.log('[kv] kv.get result:', events);
-      events = events || [];
+      console.log('[kv] Type of events:', typeof events);
+      
+      // Ensure events is always an array
+      if (!events) {
+        events = [];
+      } else if (typeof events === 'string') {
+        try {
+          events = JSON.parse(events);
+        } catch (parseError) {
+          console.error('[kv] JSON parse error:', parseError);
+          events = [];
+        }
+      } else if (!Array.isArray(events)) {
+        console.log('[kv] Events is not array, converting:', events);
+        events = [];
+      }
+      
+      console.log('[kv] Final events array length:', events.length);
     } catch (getError) {
       console.error('[kv] ❌ KV read ERROR:', getError.message);
       console.error('[kv] Stack:', getError.stack);

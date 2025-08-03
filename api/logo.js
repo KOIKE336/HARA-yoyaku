@@ -63,7 +63,34 @@ export default async function handler(req, res) {
     console.log('[logo] Replace mode:', isReplaceMode);
     
     // 現在のイベントデータを取得 (replace mode では空配列から開始)
-    const events = isReplaceMode ? [] : (await kv.get('events') || []);
+    let events;
+    if (isReplaceMode) {
+      events = [];
+    } else {
+      try {
+        events = await kv.get('events');
+        console.log('[logo] Raw events from KV:', events);
+        console.log('[logo] Type of events:', typeof events);
+        
+        // Ensure events is always an array
+        if (!events) {
+          events = [];
+        } else if (typeof events === 'string') {
+          try {
+            events = JSON.parse(events);
+          } catch (parseError) {
+            console.error('[logo] JSON parse error:', parseError);
+            events = [];
+          }
+        } else if (!Array.isArray(events)) {
+          console.log('[logo] Events is not array, converting:', events);
+          events = [];
+        }
+      } catch (getError) {
+        console.error('[logo] Error getting events:', getError);
+        events = [];
+      }
+    }
     console.log(`[logo] Starting with ${events.length} existing events (replace mode: ${isReplaceMode})`);
 
     if (isBulkImport) {
