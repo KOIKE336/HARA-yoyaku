@@ -972,21 +972,36 @@
                     complete: async function(results) {
                         try {
                             console.log(`CSV parsed: ${results.data.length} rows`);
+                            console.log('CSV column headers:', Object.keys(results.data[0] || {}));
+                            console.log('First row sample:', results.data[0]);
+                            
                             const validEvents = [];
                             const errorRows = [];
                             
                             results.data.forEach((row, index) => {
                                 let eventData = null;
+                                console.log(`Processing row ${index + 1}:`, row);
                                 
-                                // Try different column mappings
-                                if (row['部屋'] && row['氏名'] && row['開始'] && row['終了']) {
-                                    // Simple format
+                                // Try different column mappings with more flexibility
+                                const roomCol = row['部屋'] || row['room'] || row['Room'] || row['ROOM'];
+                                const nameCol = row['氏名'] || row['name'] || row['Name'] || row['NAME'] || row['予約者'];
+                                const startCol = row['開始'] || row['start'] || row['Start'] || row['START'] || row['開始時刻'] || row['開始日時'];
+                                const endCol = row['終了'] || row['end'] || row['End'] || row['END'] || row['終了時刻'] || row['終了日時'];
+                                
+                                if (roomCol && nameCol && startCol && endCol) {
+                                    // Simple format with flexible column names
+                                    console.log(`Found valid data: ${roomCol}, ${nameCol}, ${startCol}, ${endCol}`);
+                                    
+                                    // Clean up datetime format (remove timezone if present)
+                                    const cleanStart = startCol.replace(/\+09:00$/, '');
+                                    const cleanEnd = endCol.replace(/\+09:00$/, '');
+                                    
                                     eventData = {
                                         id: `csv_${Date.now()}_${index}`,
-                                        room: row['部屋'],
-                                        name: row['氏名'],
-                                        start: row['開始'],
-                                        end: row['終了']
+                                        room: roomCol.trim(),
+                                        name: nameCol.trim(),
+                                        start: cleanStart,
+                                        end: cleanEnd
                                     };
                                 } else if (row['5:date'] && (row['7:checkbox'] || row['8:checkbox'] || row['234:checkbox'] || row['235:checkbox'])) {
                                     // LogoForm format
@@ -1028,8 +1043,11 @@
                                 
                                 if (eventData) {
                                     validEvents.push(eventData);
+                                    console.log(`Row ${index + 1}: Successfully parsed event`, eventData);
                                 } else {
                                     errorRows.push(index + 1);
+                                    console.log(`Row ${index + 1}: Failed to parse - missing required columns`);
+                                    console.log(`Available columns:`, Object.keys(row));
                                 }
                             });
                             
