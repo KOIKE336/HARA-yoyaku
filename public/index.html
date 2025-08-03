@@ -972,7 +972,15 @@
                     complete: async function(results) {
                         try {
                             console.log(`CSV parsed: ${results.data.length} rows`);
-                            console.log('CSV column headers:', Object.keys(results.data[0] || {}));
+                            const headers = Object.keys(results.data[0] || {});
+                            console.log('CSV column headers:', headers);
+                            console.log('Column count:', headers.length);
+                            
+                            // Display all column names for debugging
+                            headers.forEach((header, index) => {
+                                console.log(`Column ${index + 1}: "${header}"`);
+                            });
+                            
                             console.log('First row sample:', results.data[0]);
                             
                             const validEvents = [];
@@ -980,7 +988,14 @@
                             
                             results.data.forEach((row, index) => {
                                 let eventData = null;
-                                console.log(`Processing row ${index + 1}:`, row);
+                                console.log(`Processing row ${index + 1}:`);
+                                
+                                // Show non-empty values in the row
+                                Object.keys(row).forEach(key => {
+                                    if (row[key] && row[key].trim && row[key].trim()) {
+                                        console.log(`  "${key}": "${row[key]}"`);
+                                    }
+                                });
                                 
                                 // Try different column mappings with more flexibility
                                 const roomCol = row['部屋'] || row['room'] || row['Room'] || row['ROOM'];
