@@ -602,8 +602,13 @@
         
         // Bulk delete functions for enhanced admin interface
         window.selectAllEvents = function() {
+            console.log('selectAllEvents called');
             const checkboxes = document.querySelectorAll('.event-checkbox');
-            checkboxes.forEach(checkbox => checkbox.checked = true);
+            console.log('Found checkboxes:', checkboxes.length);
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = true;
+                console.log('Checked checkbox with ID:', checkbox.getAttribute('data-event-id'));
+            });
             window.updateSelectionCount();
         };
         
@@ -627,6 +632,7 @@
         window.updateSelectionCount = function() {
             const checkboxes = document.querySelectorAll('.event-checkbox');
             const checkedCount = document.querySelectorAll('.event-checkbox:checked').length;
+            console.log(`Selection count: ${checkedCount}/${checkboxes.length} checkboxes`);
             const countElement = document.getElementById('selectionCount');
             if (countElement) {
                 countElement.textContent = `選択: ${checkedCount}件`;
@@ -634,8 +640,11 @@
         };
         
         window.deleteBulkEvents = async function() {
+            console.log('deleteBulkEvents called');
             const checkedBoxes = document.querySelectorAll('.event-checkbox:checked');
+            console.log('Found checked boxes:', checkedBoxes.length);
             const selectedIds = Array.from(checkedBoxes).map(checkbox => checkbox.getAttribute('data-event-id'));
+            console.log('Selected IDs:', selectedIds);
             
             if (selectedIds.length === 0) {
                 alert('削除する項目を選択してください');
