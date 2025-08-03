@@ -957,11 +957,25 @@
             }
             
             try {
-                // Read file
-                const text = await file.text();
+                // Read file with proper encoding detection
+                let text;
+                try {
+                    // Try reading as UTF-8 first
+                    text = await file.text();
+                } catch (encodingError) {
+                    console.warn('UTF-8 reading failed, trying alternative method');
+                    // Fallback: use FileReader with explicit encoding
+                    const reader = new FileReader();
+                    text = await new Promise((resolve, reject) => {
+                        reader.onload = e => resolve(e.target.result);
+                        reader.onerror = reject;
+                        reader.readAsText(file, 'UTF-8');
+                    });
+                }
+                
                 console.log('CSV file read successfully');
                 
-                // Parse CSV using PapaParse
+                // Parse CSV using PapaParse with encoding options
                 if (typeof Papa === 'undefined') {
                     throw new Error('PapaParse library not available');
                 }
@@ -969,6 +983,15 @@
                 Papa.parse(text, {
                     header: true,
                     skipEmptyLines: true,
+                    encoding: 'UTF-8',
+                    transform: function(value) {
+                        // Clean up character encoding issues during parsing
+                        if (typeof value === 'string') {
+                            return value.replace(/[\uFFFD]/g, '?')
+                                       .replace(/[^\u0000-\u007F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/g, '?');
+                        }
+                        return value;
+                    },
                     complete: async function(results) {
                         try {
                             console.log(`CSV parsed: ${results.data.length} rows`);
@@ -1011,10 +1034,13 @@
                                     const cleanStart = startCol.replace(/\+09:00$/, '');
                                     const cleanEnd = endCol.replace(/\+09:00$/, '');
                                     
+                                    // Clean up text encoding for names
+                                    const cleanName = nameCol.trim().replace(/[\uFFFD]/g, '?');
+                                    
                                     eventData = {
                                         id: `csv_${Date.now()}_${index}`,
                                         room: roomCol.trim(),
-                                        name: nameCol.trim(),
+                                        name: cleanName,
                                         start: cleanStart,
                                         end: cleanEnd
                                     };
@@ -1022,8 +1048,8 @@
                                     // LogoForm format - improved parsing
                                     console.log('LogoForm format detected');
                                     
-                                    const firstname = row['244:firstname'] || row['91:firstname'] || '';
-                                    const lastname = row['244:lastname'] || row['91:lastname'] || '';
+                                    const firstname = (row['244:firstname'] || row['91:firstname'] || '').replace(/[\uFFFD]/g, '?');
+                                    const lastname = (row['244:lastname'] || row['91:lastname'] || '').replace(/[\uFFFD]/g, '?');
                                     const name = `${firstname} ${lastname}`.trim() || '予約者';
                                     
                                     console.log(`Name parsed: "${firstname}" + "${lastname}" = "${name}"`);
