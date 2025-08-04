@@ -25,6 +25,8 @@ const kv = {
 export default async function handler(req, res) {
   console.log(`[events] ${req.method} request received`);
   
+  try {
+  
   // CORS許可ヘッダを設定
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, DELETE, OPTIONS');
@@ -204,5 +206,11 @@ export default async function handler(req, res) {
     console.error('[kv] ❌ KV read ERROR:', error.message);
     console.error('[kv] Stack:', error.stack);
     res.status(500).json({ error: 'KV read failed: ' + error.message });
+  }
+  
+  } catch (globalError) {
+    console.error('[events] ❌ GLOBAL ERROR:', globalError.message);
+    console.error('[events] ❌ Stack trace:', globalError.stack);
+    res.status(500).json({ error: 'Internal server error: ' + globalError.message });
   }
 }
