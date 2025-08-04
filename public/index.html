@@ -1007,10 +1007,10 @@
                     skipEmptyLines: true,
                     encoding: 'UTF-8',
                     transform: function(value) {
-                        // Clean up character encoding issues during parsing
+                        // Clean up character encoding issues during parsing while preserving Japanese
                         if (typeof value === 'string') {
-                            return value.replace(/[\uFFFD]/g, '?')
-                                       .replace(/[^\u0000-\u007F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/g, '?');
+                            return value.replace(/[\uFFFD]/g, '')  // Remove replacement characters
+                                       .replace(/[^\u0000-\u007F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\u2000-\u206F\u3000\r\n\t]/g, '');  // Keep ASCII, Japanese, and whitespace
                         }
                         return value;
                     },
@@ -1056,8 +1056,11 @@
                                     const cleanStart = startCol.replace(/\+09:00$/, '');
                                     const cleanEnd = endCol.replace(/\+09:00$/, '');
                                     
-                                    // Clean up text encoding for names
-                                    const cleanName = nameCol.trim().replace(/[\uFFFD]/g, '?');
+                                    // Clean up text encoding for names while preserving Japanese
+                                    const cleanName = nameCol.trim()
+                                        .replace(/[\uFFFD]/g, '')  // Remove replacement characters
+                                        .replace(/[^\u0000-\u007F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\u2000-\u206F\u3000]/g, '')  // Remove non-ASCII except Japanese
+                                        .trim() || '予約者';
                                     
                                     eventData = {
                                         id: `csv_${Date.now()}_${index}`,
@@ -1070,8 +1073,21 @@
                                     // LogoForm format - improved parsing
                                     console.log('LogoForm format detected');
                                     
-                                    const firstname = (row['244:firstname'] || row['91:firstname'] || '').replace(/[\uFFFD]/g, '?');
-                                    const lastname = (row['244:lastname'] || row['91:lastname'] || '').replace(/[\uFFFD]/g, '?');
+                                    // More sophisticated character encoding handling for names
+                                    let firstname = row['244:firstname'] || row['91:firstname'] || '';
+                                    let lastname = row['244:lastname'] || row['91:lastname'] || '';
+                                    
+                                    // Clean up encoding issues while preserving Japanese characters
+                                    const cleanName = (name) => {
+                                        return name
+                                            .replace(/[\uFFFD]/g, '')  // Remove replacement characters
+                                            .replace(/[^\u0000-\u007F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\u2000-\u206F\u3000]/g, '')  // Remove non-ASCII except Japanese
+                                            .trim();
+                                    };
+                                    
+                                    firstname = cleanName(firstname);
+                                    lastname = cleanName(lastname);
+                                    
                                     const name = `${firstname} ${lastname}`.trim() || '予約者';
                                     
                                     console.log(`Name parsed: "${firstname}" + "${lastname}" = "${name}"`);
