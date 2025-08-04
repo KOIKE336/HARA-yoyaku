@@ -128,9 +128,12 @@ export default async function handler(req, res) {
     // KVからイベントデータを取得（null防御）
     let events;
     try {
+      console.log('[kv] Starting kv.get operation...');
       events = await kv.get('events');
       console.log('[kv] kv.get result:', events);
       console.log('[kv] Type of events:', typeof events);
+      console.log('[kv] Events is null?', events === null);
+      console.log('[kv] Events is undefined?', events === undefined);
       
       // Ensure events is always an array
       if (!events) {
@@ -169,16 +172,26 @@ export default async function handler(req, res) {
         return false; // 終了時刻のないイベントは削除
       }
       
-      const eventEndTime = new Date(event.end);
-      const isValid = eventEndTime >= oneWeekAgo;  // 1週間以内は保持
-      
-      if (!isValid) {
-        console.log('[kv] Expired event removed (older than 1 week):', event.id, event.end, 'eventEndTime:', eventEndTime.toISOString());
-      } else {
-        console.log('[kv] Event kept:', event.id, event.end, 'eventEndTime:', eventEndTime.toISOString());
+      try {
+        const eventEndTime = new Date(event.end);
+        if (isNaN(eventEndTime.getTime())) {
+          console.log('[kv] Invalid date for event:', event.id, event.end);
+          return false;
+        }
+        
+        const isValid = eventEndTime >= oneWeekAgo;  // 1週間以内は保持
+        
+        if (!isValid) {
+          console.log('[kv] Expired event removed (older than 1 week):', event.id, event.end, 'eventEndTime:', eventEndTime.toISOString());
+        } else {
+          console.log('[kv] Event kept:', event.id, event.end, 'eventEndTime:', eventEndTime.toISOString());
+        }
+        
+        return isValid;
+      } catch (dateError) {
+        console.error('[kv] Date processing error for event:', event.id, dateError.message);
+        return false;
       }
-      
-      return isValid;
     });
     
     console.log('[kv] Events after expiry filter:', validEvents.map(e => ({id: e.id, end: e.end})));
@@ -198,10 +211,30 @@ export default async function handler(req, res) {
     }
     
     console.log('[kv] ✅ KV read SUCCESS:', validEvents.length, 'events');
-    console.log('[kv] Valid events IDs:', validEvents.map(e => e.id));
-    console.log('[kv] Events data:', JSON.stringify(validEvents));
-
-    res.status(200).json({ events: validEvents });
+    
+    try {
+      console.log('[kv] Valid events IDs:', validEvents.map(e => e && e.id ? e.id : 'INVALID_EVENT'));
+      console.log('[kv] Events data length:', JSON.stringify(validEvents).length);
+      
+      // Validate events structure before sending
+      const validatedEvents = validEvents.filter(event => {
+        if (!event || typeof event !== 'object') {
+          console.error('[kv] Invalid event object:', event);
+          return false;
+        }
+        if (!event.id || !event.room || !event.name) {
+          console.error('[kv] Event missing required fields:', event);
+          return false;
+        }
+        return true;
+      });
+      
+      console.log('[kv] Validated events count:', validatedEvents.length);
+      res.status(200).json({ events: validatedEvents });
+    } catch (jsonError) {
+      console.error('[kv] JSON serialization error:', jsonError.message);
+      res.status(500).json({ error: 'JSON serialization failed: ' + jsonError.message });
+    }
   } catch (error) {
     console.error('[kv] ❌ KV read ERROR:', error.message);
     console.error('[kv] Stack:', error.stack);
