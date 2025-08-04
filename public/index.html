@@ -979,20 +979,71 @@
             }
             
             try {
-                // Read file with proper encoding detection
+                // Advanced file reading with encoding detection
                 let text;
-                try {
-                    // Try reading as UTF-8 first
+                
+                // First try to detect encoding by reading as ArrayBuffer
+                const arrayBuffer = await file.arrayBuffer();
+                const uint8Array = new Uint8Array(arrayBuffer);
+                
+                // Simple encoding detection - look for common Japanese encoding patterns
+                let encoding = 'UTF-8';
+                
+                // Check for BOM
+                if (uint8Array[0] === 0xEF && uint8Array[1] === 0xBB && uint8Array[2] === 0xBF) {
+                    encoding = 'UTF-8';
+                    console.log('Detected UTF-8 BOM');
+                } else if (uint8Array[0] === 0xFF && uint8Array[1] === 0xFE) {
+                    encoding = 'UTF-16LE';
+                    console.log('Detected UTF-16LE BOM');
+                } else {
+                    // Try to detect Shift-JIS by looking for specific byte patterns
+                    let hasShiftJIS = false;
+                    for (let i = 0; i < Math.min(uint8Array.length, 1000); i++) {
+                        const byte = uint8Array[i];
+                        // Common Shift-JIS ranges
+                        if ((byte >= 0x81 && byte <= 0x9F) || (byte >= 0xE0 && byte <= 0xFC)) {
+                            hasShiftJIS = true;
+                            break;
+                        }
+                    }
+                    
+                    if (hasShiftJIS) {
+                        encoding = 'Shift_JIS';
+                        console.log('Detected possible Shift-JIS encoding');
+                    }
+                }
+                
+                console.log(`Using encoding: ${encoding}`);
+                
+                // Try multiple encodings
+                const encodingsToTry = [encoding, 'UTF-8', 'Shift_JIS', 'ISO-2022-JP', 'EUC-JP'];
+                
+                for (const tryEncoding of encodingsToTry) {
+                    try {
+                        const decoder = new TextDecoder(tryEncoding, { fatal: false });
+                        text = decoder.decode(uint8Array);
+                        
+                        // Check if decoding was successful by looking for readable Japanese
+                        if (text.includes('部屋') || text.includes('氏名') || text.includes('会議室') || 
+                            text.match(/[一-龯]/)) {  // Contains kanji
+                            console.log(`Successfully decoded with ${tryEncoding}`);
+                            break;
+                        } else if (tryEncoding === 'UTF-8' && !text.includes('�')) {
+                            // UTF-8 without replacement characters is probably fine
+                            console.log(`Using UTF-8 (no replacement characters)`);
+                            break;
+                        }
+                    } catch (decodeError) {
+                        console.warn(`Failed to decode with ${tryEncoding}:`, decodeError.message);
+                        continue;
+                    }
+                }
+                
+                if (!text) {
+                    // Fallback to browser's default
                     text = await file.text();
-                } catch (encodingError) {
-                    console.warn('UTF-8 reading failed, trying alternative method');
-                    // Fallback: use FileReader with explicit encoding
-                    const reader = new FileReader();
-                    text = await new Promise((resolve, reject) => {
-                        reader.onload = e => resolve(e.target.result);
-                        reader.onerror = reject;
-                        reader.readAsText(file, 'UTF-8');
-                    });
+                    console.log('Using browser default encoding as fallback');
                 }
                 
                 console.log('CSV file read successfully');
@@ -1007,10 +1058,9 @@
                     skipEmptyLines: true,
                     encoding: 'UTF-8',
                     transform: function(value) {
-                        // Clean up character encoding issues during parsing while preserving Japanese
+                        // Only remove obvious replacement characters, keep everything else
                         if (typeof value === 'string') {
-                            return value.replace(/[\uFFFD]/g, '')  // Remove replacement characters
-                                       .replace(/[^\u0000-\u007F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\u2000-\u206F\u3000\r\n\t]/g, '');  // Keep ASCII, Japanese, and whitespace
+                            return value.replace(/[\uFFFD]/g, '');  // Only remove replacement characters
                         }
                         return value;
                     },
@@ -1056,11 +1106,8 @@
                                     const cleanStart = startCol.replace(/\+09:00$/, '');
                                     const cleanEnd = endCol.replace(/\+09:00$/, '');
                                     
-                                    // Clean up text encoding for names while preserving Japanese
-                                    const cleanName = nameCol.trim()
-                                        .replace(/[\uFFFD]/g, '')  // Remove replacement characters
-                                        .replace(/[^\u0000-\u007F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\u2000-\u206F\u3000]/g, '')  // Remove non-ASCII except Japanese
-                                        .trim() || '予約者';
+                                    // Simple name cleanup - preserve original characters 
+                                    const cleanName = nameCol.trim().replace(/[\uFFFD]/g, '') || '予約者';
                                     
                                     eventData = {
                                         id: `csv_${Date.now()}_${index}`,
@@ -1073,20 +1120,13 @@
                                     // LogoForm format - improved parsing
                                     console.log('LogoForm format detected');
                                     
-                                    // More sophisticated character encoding handling for names
-                                    let firstname = row['244:firstname'] || row['91:firstname'] || '';
-                                    let lastname = row['244:lastname'] || row['91:lastname'] || '';
+                                    // Simple name handling - preserve original characters
+                                    let firstname = (row['244:firstname'] || row['91:firstname'] || '').trim();
+                                    let lastname = (row['244:lastname'] || row['91:lastname'] || '').trim();
                                     
-                                    // Clean up encoding issues while preserving Japanese characters
-                                    const cleanName = (name) => {
-                                        return name
-                                            .replace(/[\uFFFD]/g, '')  // Remove replacement characters
-                                            .replace(/[^\u0000-\u007F\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\u2000-\u206F\u3000]/g, '')  // Remove non-ASCII except Japanese
-                                            .trim();
-                                    };
-                                    
-                                    firstname = cleanName(firstname);
-                                    lastname = cleanName(lastname);
+                                    // Only remove obvious replacement characters
+                                    firstname = firstname.replace(/[\uFFFD]/g, '');
+                                    lastname = lastname.replace(/[\uFFFD]/g, '');
                                     
                                     const name = `${firstname} ${lastname}`.trim() || '予約者';
                                     
