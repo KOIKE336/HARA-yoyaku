@@ -1176,13 +1176,20 @@
                                                 .replace(/[\u65374\u12316\u8230]/g, '～')  // Various tilde characters
                                                 .replace(/[\u65306\u12306]/g, ':');  // Various colon characters
                                             
-                                            // Handle production CSV format: "09?30?10?00" -> "09:30～10:00"
+                                            // Handle multiple production CSV formats
                                             if (/^\d{2}\?\d{2}\?\d{2}\?\d{2}$/.test(cleanSlot)) {
                                                 // Format: "09?30?10?00"
                                                 const timeMatch = cleanSlot.match(/^(\d{2})\?(\d{2})\?(\d{2})\?(\d{2})$/);
                                                 if (timeMatch) {
                                                     cleanSlot = `${timeMatch[1]}:${timeMatch[2]}～${timeMatch[3]}:${timeMatch[4]}`;
                                                     console.log(`Production format converted: "${slot}" -> "${cleanSlot}"`);
+                                                }
+                                            } else if (/^\d{8}$/.test(cleanSlot)) {
+                                                // Format: "10001030" -> "10:00～10:30"
+                                                const timeMatch = cleanSlot.match(/^(\d{2})(\d{2})(\d{2})(\d{2})$/);
+                                                if (timeMatch) {
+                                                    cleanSlot = `${timeMatch[1]}:${timeMatch[2]}～${timeMatch[3]}:${timeMatch[4]}`;
+                                                    console.log(`8-digit format converted: "${slot}" -> "${cleanSlot}"`);
                                                 }
                                             } else {
                                                 // Remove remaining question marks for other formats
