@@ -1181,10 +1181,11 @@
                                             let cleanSlot = slot.trim()
                                                 .replace(/[\uFFFD]/g, '')  // Remove replacement characters
                                                 .replace(/\?F/g, ':')  // Fix ?F to colon
-                                                .replace(/\?\`/g, '～')  // Fix ?` to tilde
+                                                .replace(/\?\`/g, '～')  // Fix ?` to tilde  
                                                 .replace(/F/g, ':')  // Sometimes 'F' appears instead of colon
                                                 .replace(/`/g, '～')  // Replace backtick with tilde
                                                 .replace(/\\/g, '～')  // Sometimes backslash appears
+                                                .replace(/：/g, ':')  // Convert full-width colon to half-width
                                                 .replace(/[\u65374\u12316\u8230]/g, '～')  // Various tilde characters
                                                 .replace(/[\u65306\u12306]/g, ':');  // Various colon characters
                                             

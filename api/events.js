@@ -163,6 +163,8 @@ export default async function handler(req, res) {
     // Note: 1週間以上古いイベントのみ削除（テストデータ保護のため）
     const now = new Date();
     const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    console.log('[kv] Current date:', now.toISOString().split('T')[0]);
+    console.log('[kv] One week ago date:', oneWeekAgo.toISOString().split('T')[0]);
     console.log('[kv] Checking expiry: now =', now.toISOString(), 'oneWeekAgo =', oneWeekAgo.toISOString());
     console.log('[kv] Raw events before expiry check:', events.map(e => ({id: e.id, end: e.end})));
     
