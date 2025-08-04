@@ -1016,8 +1016,8 @@
                 
                 console.log(`Using encoding: ${encoding}`);
                 
-                // Try multiple encodings
-                const encodingsToTry = [encoding, 'UTF-8', 'Shift_JIS', 'ISO-2022-JP', 'EUC-JP'];
+                // Try multiple encodings in optimal order
+                const encodingsToTry = ['UTF-8', 'Shift_JIS', 'EUC-JP', 'ISO-2022-JP', encoding].filter((e, i, arr) => arr.indexOf(e) === i);
                 
                 for (const tryEncoding of encodingsToTry) {
                     try {
@@ -1025,14 +1025,19 @@
                         text = decoder.decode(uint8Array);
                         
                         // Check if decoding was successful by looking for readable Japanese
-                        if (text.includes('部屋') || text.includes('氏名') || text.includes('会議室') || 
-                            text.match(/[一-龯]/)) {  // Contains kanji
-                            console.log(`Successfully decoded with ${tryEncoding}`);
+                        const hasValidJapanese = text.includes('部屋') || text.includes('氏名') || text.includes('開始') || text.includes('終了') || text.includes('会議室');
+                        const hasGarbledText = text.includes('蝗樒ｭ') || text.includes('繧ｪ繝ｳ') || text.includes('譏･鄒') || text.includes('莨願陸');
+                        
+                        if (hasValidJapanese && !hasGarbledText) {
+                            console.log(`Successfully decoded with ${tryEncoding} - found valid Japanese`);
                             break;
-                        } else if (tryEncoding === 'UTF-8' && !text.includes('�')) {
-                            // UTF-8 without replacement characters is probably fine
-                            console.log(`Using UTF-8 (no replacement characters)`);
+                        } else if (tryEncoding === 'UTF-8' && !text.includes('�') && !hasGarbledText) {
+                            // UTF-8 without replacement characters and no garbled text
+                            console.log(`Using UTF-8 (clean text)`);
                             break;
+                        } else if (hasGarbledText) {
+                            console.log(`${tryEncoding} produced garbled text, trying next encoding`);
+                            continue;
                         }
                     } catch (decodeError) {
                         console.warn(`Failed to decode with ${tryEncoding}:`, decodeError.message);
@@ -1041,9 +1046,16 @@
                 }
                 
                 if (!text) {
-                    // Fallback to browser's default
-                    text = await file.text();
-                    console.log('Using browser default encoding as fallback');
+                    // Final fallback: try UTF-8 with fatal=true to force proper handling
+                    try {
+                        const decoder = new TextDecoder('UTF-8', { fatal: true });
+                        text = decoder.decode(uint8Array);
+                        console.log('Using strict UTF-8 as final fallback');
+                    } catch (finalError) {
+                        // Last resort: browser default
+                        text = await file.text();
+                        console.log('Using browser default encoding as last resort');
+                    }
                 }
                 
                 console.log('CSV file read successfully');
